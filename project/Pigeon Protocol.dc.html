@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-976f0316-5fab-4612-8e47-67d22bcbbe69/styles.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #f3f2f2; }
+    a { color: #ec3013; } a:hover { color: #c92a10; }
+  </style>
+</helmet>
+<div style="position: fixed; inset: 0; background: #f3f2f2;">
+  <x-import component-from-global-scope="pigeon-game" from="./game.js" show-cones="{{ showConesStr }}" cam-dist="{{ camDist }}" hint-size="100%,100%"></x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showCones&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;게임플레이&quot;},&quot;camDist&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:16,&quot;min&quot;:11,&quot;max&quot;:24,&quot;step&quot;:1,&quot;unit&quot;:&quot;m&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;카메라&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showConesStr: (this.props.showCones ?? true) ? 'true' : 'false',
+      camDist: this.props.camDist ?? 16
+    };
+  }
+}
+</script>
+</body>
+</html>
