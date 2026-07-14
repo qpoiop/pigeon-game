@@ -168,6 +168,7 @@ src/
     net.ts                     공개 릴레이 접속/프레즌스 (Net)
     voice.ts                   WebRTC P2P 음성 (Voice)
     template.ts                HUD 마크업 + 컴포넌트 CSS
+    three-utils.ts             Object3D 리소스 정리(disposeObject, 테스트됨)
     types.ts                   런타임 엔티티 타입
     ai/                        ── 경비 AI (순수·테스트 가능) ──
       navgrid.ts               벽에서 만든 반경 팽창 격자 (NavGrid)

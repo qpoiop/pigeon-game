@@ -20,6 +20,7 @@ import { clamp, angleDelta } from './anim';
 import { NavGrid } from './ai/navgrid';
 import { findPath } from './ai/pathfind';
 import { searchPoint, flankPoint } from './ai/squad';
+import { disposeObject } from './three-utils';
 import { TPL, CSS } from './template';
 import type {
   BestScore,
@@ -103,6 +104,7 @@ export class PigeonGame {
   private last = 0;
   private camPos = new THREE.Vector3(0, 16, 14);
   private rosterT = 0;
+  private mapT = 0;
   private lax = 0;
   private laz = 0;
   private lookX = 0;
@@ -225,7 +227,10 @@ export class PigeonGame {
     p.facing = old ? old.facing : 0;
     p.crouch = false;
     p.smokeUntil = 0;
-    if (old) this.actorGroup.remove(old.group);
+    if (old) {
+      this.actorGroup.remove(old.group);
+      disposeObject(old.group);
+    }
     this.actorGroup.add(p.group);
     const sm = new THREE.Mesh(
       new THREE.SphereGeometry(1.1, 14, 10),
@@ -246,13 +251,23 @@ export class PigeonGame {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Remove and dispose every child of a group (frees GPU memory on rebuild). */
+  private clearGroup(group: THREE.Group): void {
+    for (let i = group.children.length - 1; i >= 0; i--) {
+      const child = group.children[i];
+      disposeObject(child);
+      group.remove(child);
+    }
+  }
+
   /* ---------- Level build ---------- */
   private buildLevel(idx: number): void {
     const L = LEVELS[idx];
     this.level = L;
     this.stageIdx = idx;
-    while (this.levelGroup.children.length) this.levelGroup.remove(this.levelGroup.children[0]);
-    while (this.fxGroup.children.length) this.fxGroup.remove(this.fxGroup.children[0]);
+    // free the previous stage's GPU resources before rebuilding
+    this.clearGroup(this.levelGroup);
+    this.clearGroup(this.fxGroup);
     this.guards = [];
     this.films = [];
     this.items = [];
@@ -1613,7 +1628,12 @@ export class PigeonGame {
       this.sun.position.set(P.pos.x + 14, 26, P.pos.y + 10);
       this.sun.target.position.set(P.pos.x, 0, P.pos.y);
       this.sun.target.updateMatrixWorld();
-      this.drawMap();
+      // minimap only matters during play; redraw at ~20fps, not every frame
+      this.mapT += dt;
+      if (this.mode === 'play' && this.mapT >= 0.05) {
+        this.mapT = 0;
+        this.drawMap();
+      }
       this.renderer.render(this.scene, this.camera);
     };
     this.rafId = requestAnimationFrame(frame);
@@ -1705,6 +1725,7 @@ export class PigeonGame {
       if (stale) {
         if (m) {
           this.actorGroup.remove(m.pg.group);
+          disposeObject(m.pg.group);
           delete this.peersMeshes[id];
         }
         if (now - p.seen > 15000) {
@@ -1715,7 +1736,10 @@ export class PigeonGame {
         continue;
       }
       if (!m || m.char !== p.char) {
-        if (m) this.actorGroup.remove(m.pg.group);
+        if (m) {
+          this.actorGroup.remove(m.pg.group);
+          disposeObject(m.pg.group);
+        }
         const kind = CHARS[p.char] ? CHARS[p.char].kind : 'pigeon';
         const pg = makeBird({ body: 0xb9b6b3, head: 0x8a8683, wing: 0x6d6a67, accent: 0x8a8683 }, kind);
         const label = makeLabel(p.name || '요원');
@@ -1740,7 +1764,7 @@ export class PigeonGame {
   /** Tear down listeners, RAF and GPU resources when the shell unmounts. */
   dispose(): void {
     cancelAnimationFrame(this.rafId);
-    this.sfx.stopAmb();
+    this.sfx.dispose();
     this.resizeObs?.disconnect();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
@@ -1753,6 +1777,7 @@ export class PigeonGame {
     for (const id in this.net.voice.pcs) this.net.voice.drop(id);
     if (this.net.voice.stream) this.net.voice.stream.getTracks().forEach((tr) => tr.stop());
     try {
+      if (this.scene) disposeObject(this.scene);
       this.renderer?.dispose();
     } catch {
       /* noop */

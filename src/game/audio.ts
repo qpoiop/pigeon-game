@@ -125,4 +125,18 @@ export class Sfx {
       /* noop */
     }
   }
+
+  /** Stop the drone and release the AudioContext (called on teardown). */
+  dispose(): void {
+    this.stopAmb();
+    const ctx = this.ctx;
+    this.ctx = null;
+    if (ctx && ctx.state !== 'closed') {
+      try {
+        void ctx.close();
+      } catch {
+        /* already closing */
+      }
+    }
+  }
 }
