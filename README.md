@@ -8,6 +8,36 @@
 Three.js로 렌더링하며 **Vite + React + TypeScript** 웹앱으로 구성되어 실제 배포와
 콘텐츠 확장(요원·스테이지 추가, 데이터 관리)에 적합하도록 만들어졌다.
 
+## 스크린샷
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/img/title.png" alt="타이틀 화면 — 요원·난이도·스테이지 선택·설정">
+      <br><sub><b>타이틀</b> — 요원 · 난이도 · 스테이지 선택 · 설정</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/img/gameplay.png" alt="게임플레이 — 미니맵과 목표 방향 화살표">
+      <br><sub><b>잠입</b> — 미니맵 · 목표 방향 화살표 · 경비 시야콘</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/img/mission-file.png" alt="임무 파일 드로어">
+      <br><sub><b>임무 파일 (Tab)</b> — 체크리스트 · 장비 · 참가자</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/img/agent-magpie.png" alt="까치 요원, 어려움 난이도">
+      <br><sub><b>요원 선택</b> — 까치(속도형) · 어려움</sub>
+    </td>
+  </tr>
+</table>
+
+> 스크린샷은 헤드리스 브라우저 캡처라 Archivo 웹폰트가 시스템 폰트로 대체되어 있다.
+> 실제 배포 환경에서는 Archivo가 로드되어 Modernist 타이포그래피가 그대로 나온다.
+
+각 화면 설명은 [`docs/SCREENSHOTS.md`](docs/SCREENSHOTS.md) 가이드를 참고.
+
 ---
 
 ## 실행
