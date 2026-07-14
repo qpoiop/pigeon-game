@@ -4,9 +4,21 @@ import type { CharId } from '../data/characters';
 
 export type NetState = 'off' | 'connecting' | 'on';
 
-/** Free public relay used as a best-effort broadcast bus for a room code. */
-const RELAY_URL = 'wss://socketsbay.com/wss/v2/1/demo/';
+/**
+ * Relay used as a best-effort broadcast bus for a room. Prefer the app's own
+ * relay (VITE_RELAY_URL, e.g. the pigeonoid-worker on Cloudflare) with the room
+ * as a query param; fall back to the free public demo relay when unset so the
+ * build still runs online without any backend configured.
+ */
+const OWN_RELAY = import.meta.env.VITE_RELAY_URL;
+const PUBLIC_RELAY = 'wss://socketsbay.com/wss/v2/1/demo/';
 const PROTOCOL_TAG = 'pigeon-protocol';
+
+function relayUrl(room: string): string {
+  if (!OWN_RELAY) return PUBLIC_RELAY;
+  const sep = OWN_RELAY.includes('?') ? '&' : '?';
+  return `${OWN_RELAY}${sep}room=${encodeURIComponent(room)}`;
+}
 
 /**
  * Thin presence/signalling layer over a public WebSocket relay. Every client in
@@ -40,7 +52,7 @@ export class Net implements Signaler {
     try {
       this.status = 'connecting';
       this.onStatus();
-      const ws = new WebSocket(RELAY_URL);
+      const ws = new WebSocket(relayUrl(room));
       this.ws = ws;
       ws.onopen = () => {
         this.status = 'on';

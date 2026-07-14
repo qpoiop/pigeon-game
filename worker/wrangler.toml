@@ -1,0 +1,16 @@
+name = "pigeonoid-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# One Durable Object instance per room code holds that room's WebSockets.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed Durable Objects are eligible for the Workers free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[observability]
+enabled = true

@@ -63,6 +63,36 @@ pnpm test          # vitest — 경비 길찾기 + 애니메이션 수학 단위
 
 ---
 
+## 배포 (Cloudflare)
+
+`production` 브랜치에 푸시하면 `.github/workflows/deploy.yml`이 두 가지를 배포한다.
+
+| 대상 | 서비스 | 무엇 |
+| --- | --- | --- |
+| 프론트(정적 SPA) | **Cloudflare Pages** · `pigeonoid` | `pnpm build` → `dist/` 배포 |
+| 온라인 WS API | **Cloudflare Workers** · `pigeonoid-worker` | `worker/`의 WebSocket 릴레이(Durable Object) |
+
+**서버가 꼭 필요한가?** 게임 자체는 정적이라 **Pages만으로 완전히 동작**한다. 다만
+온라인 멀티/음성은 WebSocket 릴레이가 필요한데, 정적 호스팅이나 일반 Worker로는 방
+단위로 여러 연결을 붙들 수 없어 **Worker + Durable Object**(`pigeonoid-worker`)가 필요하다.
+방 코드를 비우면 싱글 작전이므로, **싱글만 할 거면 워커 없이 Pages만** 배포하면 된다.
+(워커를 안 띄우면 프론트는 무료 공개 릴레이로 폴백 — 불안정.)
+
+필요한 repo secrets (Settings → Secrets and variables → Actions):
+
+- `CLOUDFLARE_API_TOKEN` — `.env`의 `CF_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID` — `.env`의 `CF_ACCOUNT_ID`
+
+선택 repo variable:
+
+- `VITE_RELAY_URL` — 워커 배포 후 workers.dev URL(예:
+  `wss://pigeonoid-worker.<계정서브도메인>.workers.dev/ws`). 설정하면 프론트가 공개 릴레이
+  대신 자체 워커를 쓴다. 미설정 시 공개 릴레이로 폴백한다.
+
+WS 릴레이의 로컬 실행·검증 방법은 [`worker/README.md`](worker/README.md) 참고.
+
+---
+
 ## 게임플레이
 
 - **목표** — 스테이지의 마이크로필름을 전부 회수하면 적색 회수 구역이 열린다.

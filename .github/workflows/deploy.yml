@@ -1,0 +1,72 @@
+name: Deploy pigeonoid
+
+# 프론트(React SPA) → Cloudflare Pages (project: pigeonoid)
+# WS API(Worker+DO)  → Cloudflare Workers (service: pigeonoid-worker)
+# production 브랜치에 푸시하면 배포. 패키지 매니저: pnpm.
+#
+# 필요한 repo secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   (.env 의 CF_API_TOKEN)
+#   CLOUDFLARE_ACCOUNT_ID  (.env 의 CF_ACCOUNT_ID)
+#
+# 선택 repo variable (Settings → Secrets and variables → Actions → Variables):
+#   VITE_RELAY_URL   예) wss://pigeonoid-worker.<계정서브도메인>.workers.dev/ws
+#                    설정하지 않으면 프론트는 무료 공개 릴레이로 폴백(싱글은 무관).
+on:
+  push:
+    branches: [production]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Build & deploy SPA (Pages)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm run build
+        env:
+          # 워커 배포 후 workers.dev URL을 repo variable로 넣으면 자체 릴레이 사용
+          VITE_RELAY_URL: ${{ vars.VITE_RELAY_URL }}
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=pigeonoid --branch=production
+
+  worker:
+    name: Deploy WS API (Workers + Durable Object)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: worker/pnpm-lock.yaml
+      - name: Install worker deps
+        run: pnpm install --frozen-lockfile
+        working-directory: worker
+      - name: Type check worker
+        run: pnpm type-check
+        working-directory: worker
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
