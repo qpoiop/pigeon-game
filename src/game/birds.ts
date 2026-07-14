@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { INK, ACCENT } from '../data/palette';
 import type { BirdKind, BirdPalette } from '../data/characters';
-import type { Bird } from './types';
+import type { AnimInput, Bird } from './types';
+import { damp, clamp, pigeonBob } from './anim';
 
 function mat(c: number): THREE.MeshLambertMaterial {
   return new THREE.MeshLambertMaterial({ color: c });
@@ -137,6 +138,12 @@ export function makeBird(pal: BirdPalette, kind: BirdKind): Bird {
     idleT: 0,
     baseHeadY: isOwl ? 1.1 : 1.16,
     baseHeadZ: isOwl ? 0.3 : 0.42,
+    crouchBlend: 0,
+    leanX: 0,
+    leanZ: 0,
+    lookY: 0,
+    baseScaleY: body.scale.y,
+    baseScaleZ: body.scale.z,
   };
 }
 
@@ -172,36 +179,83 @@ export function makeLabel(text: string): THREE.Sprite {
   return sp;
 }
 
-/** Shared bird animation — walk cycle, idle head bob / pecking, wing flutter. */
-export function animBird(P: Bird, speed: number, dt: number, crouch: boolean, t: number): void {
+/**
+ * Layered procedural bird animation. On top of the original walk/idle cycle it
+ * adds eased state so motion reads as natural weight rather than snapping:
+ *  - eased crouch blend (smooth duck down / stand up)
+ *  - the iconic pigeon head-thrust while walking (+ organic idle pecks)
+ *  - a side-to-side waddle, and a forward lean + bank into turns from velocity
+ *  - a dash lunge (anticipation, forward pitch, body stretch, wings swept back)
+ *  - a head glance toward a threat/objective
+ * Purely cosmetic — no gameplay state is read or written here.
+ */
+export function animBird(P: Bird, input: AnimInput): void {
+  const { speed, dt, t, crouch } = input;
+  const turn = input.turn ?? 0;
+  const dash = clamp(input.dash ?? 0, 0, 1);
+  const lookYaw = input.lookYaw ?? 0;
   const moving = speed > 0.15;
+  const speedN = clamp(speed / 5, 0, 1);
+
+  // eased state
+  P.crouchBlend = damp(P.crouchBlend, crouch ? 1 : 0, 10, dt);
+  const cb = P.crouchBlend;
+  const leanXTarget = -(speedN * 0.14) - dash * 0.28; // pitch forward with speed / dash
+  const leanZTarget = clamp(-turn * 0.9, -0.32, 0.32); // bank into the turn
+  P.leanX = damp(P.leanX, leanXTarget, 9, dt);
+  P.leanZ = damp(P.leanZ, leanZTarget, 9, dt);
+  P.lookY = damp(P.lookY, lookYaw, 6, dt);
+
   P.phase += speed * dt * 3.4;
-  const lift = crouch ? 0.06 : 0.11;
   const s = Math.sin(P.phase * Math.PI);
+
+  // legs plant on the ground; stride grows with speed
+  const lift = 0.11 - cb * 0.05;
   P.feet[0].position.z = 0.05 + (moving ? s * 0.22 : 0);
   P.feet[0].position.y = moving ? Math.max(0, s) * lift : 0;
   P.feet[1].position.z = 0.05 + (moving ? -s * 0.22 : 0);
   P.feet[1].position.y = moving ? Math.max(0, -s) * lift : 0;
-  const baseY = crouch ? -0.16 : 0;
-  P.body.position.y = 0.62 + baseY + (moving ? Math.abs(s) * 0.05 : Math.sin(t * 1.8) * 0.015);
-  P.body.rotation.x = crouch ? 0.28 : moving ? 0.1 : 0;
-  const hy = P.baseHeadY + baseY * 1.4;
+
+  // body: crouch lower, vertical bob, dash stretch, forward lean + waddle/bank
+  const baseY = -0.16 * cb;
+  const bob = moving ? Math.abs(s) * 0.05 : Math.sin(t * 1.8) * 0.015;
+  P.body.position.y = 0.62 + baseY + bob;
+  const waddle = moving ? s * 0.06 * (1 - cb) : 0;
+  P.body.rotation.x = cb * 0.28 + (moving ? 0.1 : 0) + P.leanX;
+  P.body.rotation.z = P.leanZ + waddle;
+  // multiply the authored silhouette scale so dash stretch keeps each species' shape
+  P.body.scale.z = P.baseScaleZ * (1 + dash * 0.28 - Math.abs(waddle) * 0.1);
+  P.body.scale.y = P.baseScaleY * (1 - dash * 0.12);
+
+  // head: pigeon thrust while walking, organic pecks when idle, glance + lean
+  const hy = P.baseHeadY + baseY * 1.4 - cb * 0.14;
   if (moving) {
-    P.head.position.z = P.baseHeadZ + Math.sin(P.phase * Math.PI * 2) * 0.07;
-    P.head.position.y = hy - (crouch ? 0.14 : 0);
-    P.head.rotation.x = crouch ? 0.3 : 0.05;
+    P.head.position.z = P.baseHeadZ + pigeonBob(P.phase) * 0.09;
+    P.head.position.y = hy + Math.abs(s) * 0.02;
+    P.head.rotation.x = 0.05 + cb * 0.25 + P.leanX * 0.5;
+    P.head.rotation.y = P.lookY;
     P.idleT = 0;
-    P.head.rotation.y *= 0.85;
   } else {
     P.idleT += dt;
     const peck = Math.max(0, Math.sin(P.idleT * 1.1 - 2)) * 0.5;
+    // layered low-frequency noise → head never sits perfectly still
+    const idleLook = Math.sin(P.idleT * 0.7) * 0.5 + Math.sin(P.idleT * 0.23 + 1) * 0.18;
     P.head.position.z = P.baseHeadZ + peck * 0.12;
     P.head.position.y = hy - peck * 0.3;
-    P.head.rotation.x = peck * 0.9;
-    P.head.rotation.y = Math.sin(P.idleT * 0.7) * 0.5;
+    P.head.rotation.x = peck * 0.9 + P.leanX * 0.5;
+    P.head.rotation.y = idleLook + P.lookY;
   }
+
+  // wings: flutter with gait, flare/sweep back on a dash, asymmetry on a bank
   const flut = moving ? Math.sin(P.phase * Math.PI * 2) * 0.08 * Math.min(speed / 4, 1) : 0;
-  P.wings[0].rotation.z = -0.15 + flut;
-  P.wings[1].rotation.z = 0.15 - flut;
-  P.tail.rotation.x = -0.45 + (moving ? s * 0.08 : Math.sin(t * 2.3) * 0.04);
+  const sweep = dash * 0.5;
+  const bankTilt = P.leanZ * 0.6;
+  P.wings[0].rotation.z = -0.15 + flut - sweep + bankTilt;
+  P.wings[1].rotation.z = 0.15 - flut + sweep + bankTilt;
+  P.wings[0].rotation.x = -sweep * 0.6;
+  P.wings[1].rotation.x = -sweep * 0.6;
+
+  // tail steers/counterbalances
+  P.tail.rotation.x = -0.45 + (moving ? s * 0.08 : Math.sin(t * 2.3) * 0.04) - dash * 0.2;
+  P.tail.rotation.z = -P.leanZ * 0.5;
 }

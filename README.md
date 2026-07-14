@@ -55,7 +55,7 @@ pnpm dev           # http://localhost:5173 개발 서버
 pnpm build         # tsc -b && vite build → dist/
 pnpm preview       # 빌드 결과 로컬 서빙
 pnpm typecheck     # 타입만 검사
-pnpm test          # vitest — 경비 길찾기 단위/맵 검증 테스트
+pnpm test          # vitest — 경비 길찾기 + 애니메이션 수학 단위 테스트
 ```
 
 `dist/`는 정적 파일이며 어떤 정적 호스팅(GitHub Pages, Netlify, S3 등)에도 그대로
@@ -105,6 +105,10 @@ pnpm test          # vitest — 경비 길찾기 단위/맵 검증 테스트
 - **랭크 · 기록** — 스테이지 클리어 시 소요 시간과 발각 횟수로 **S/A/B/C 랭크**를 매기고,
   최고 기록과 스테이지 해제 상태를 브라우저(`localStorage`)에 저장한다. 타이틀에서
   **스테이지 선택**(클리어한 곳까지 해제, 최고 랭크 표시)과 요원·난이도·콜사인이 유지된다.
+- **자연스러운 동작 (절차적 애니메이션)** — 걸음 위에 레이어를 얹어 무게감을 준다:
+  비둘기 특유의 **머리 까딱임(head-thrust)** 과 좌우 뒤뚱거림, 속도·회전에 따른 **기울임/뱅크**,
+  대시 시 **앞으로 늘어나는 런지(스쿼시·스트레치)**, 부드러운 웅크림 블렌딩, 그리고 경비를
+  **곁눈질로 주시**하는 머리 회전. 순수 이징/커브 함수는 테스트로 검증(`src/game/anim.ts`).
 - **연출** — 픽업·대시 시 파티클 버스트, 잠입 중 미니멀 앰비언트 드론, 이동 방향 카메라 룩어헤드.
 
 ---
@@ -124,7 +128,8 @@ src/
     levels.ts                  LEVELS — 스테이지(맵/경비/필름/아이템)
   game/                        ── 엔진 ──
     engine.ts                  PigeonGame 클래스 (씬·시뮬레이션·HUD·루프)
-    birds.ts                   비둘기 모델 빌더 + 절차적 애니메이션
+    birds.ts                   비둘기 모델 빌더 + 레이어드 절차적 애니메이션
+    anim.ts                    순수 애니메이션 수학 (damp·pigeonBob 등, 테스트됨)
     audio.ts                   WebAudio 미니멀 신스 (Sfx)
     net.ts                     공개 릴레이 접속/프레즌스 (Net)
     voice.ts                   WebRTC P2P 음성 (Voice)

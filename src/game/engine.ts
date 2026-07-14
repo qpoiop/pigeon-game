@@ -16,6 +16,7 @@ import { LEVELS, type LevelDef } from '../data/levels';
 import { Sfx } from './audio';
 import { Net } from './net';
 import { makeBird, makeBang, makeLabel, animBird } from './birds';
+import { clamp, angleDelta } from './anim';
 import { NavGrid } from './ai/navgrid';
 import { findPath } from './ai/pathfind';
 import { TPL, CSS } from './template';
@@ -1198,6 +1199,12 @@ export class PigeonGame {
       const P = this.player;
       const C = CHARS[this.charId];
       let speed = 0;
+      // player animation drivers, set inside the play block, read at render
+      let pTurn = 0;
+      let pLook = 0;
+      let threatX = 0;
+      let threatZ = 0;
+      let threatW = 0;
       this.rosterT += dt;
       if (this.rosterT > 1) {
         this.rosterT = 0;
@@ -1265,6 +1272,7 @@ export class PigeonGame {
           while (da > Math.PI) da -= Math.PI * 2;
           while (da < -Math.PI) da += Math.PI * 2;
           P.facing += da * Math.min(1, dt * 10);
+          pTurn = da;
         }
         // films
         for (let f = 0; f < this.films.length; f++) {
@@ -1526,18 +1534,44 @@ export class PigeonGame {
             } else G.detect = Math.max(0, G.detect - dt / 1.2);
           }
           maxDetect = Math.max(maxDetect, G.state === 'chase' ? 1 : G.detect);
+          const gw = G.state === 'chase' ? 2 : G.detect;
+          if (gw > threatW) {
+            threatW = gw;
+            threatX = G.pos.x;
+            threatZ = G.pos.y;
+          }
           (G.cone.material as THREE.MeshBasicMaterial).opacity =
             0.08 + G.detect * 0.18 + (G.state === 'chase' ? 0.14 : 0);
           G.model.group.position.set(G.pos.x, 0, G.pos.y);
           G.model.group.rotation.y = G.facing;
-          animBird(G.model, gSpeed, dt, false, t + gI * 3);
+          // guards lock their gaze onto the player once they notice something
+          const gLook =
+            G.state === 'chase' || G.state === 'search' || G.detect > 0.2
+              ? clamp(angleDelta(Math.atan2(P.pos.x - G.pos.x, P.pos.y - G.pos.y), G.facing), -0.8, 0.8)
+              : 0;
+          animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false, lookYaw: gLook });
         }
         this.$<HTMLElement>('.pg-alertfill').style.width = maxDetect * 100 + '%';
+        if (threatW > 0.25) {
+          pLook = clamp(
+            angleDelta(Math.atan2(threatX - P.pos.x, threatZ - P.pos.y), P.facing),
+            -0.7,
+            0.7,
+          );
+        }
         this.net.send(P, this.stageIdx, this.charId);
       }
       P.group.position.set(P.pos.x, 0, P.pos.y);
       P.group.rotation.y = P.facing;
-      animBird(P, speed, dt, P.crouch, t);
+      animBird(P, {
+        speed,
+        dt,
+        t,
+        crouch: P.crouch,
+        turn: pTurn,
+        dash: clamp(1 - (t - this.dashT) / 0.35, 0, 1),
+        lookYaw: pLook,
+      });
       this.updatePeers();
       const cd2 = this.camDist;
       const lax = this.mode === 'play' ? this.lax : 0;
@@ -1670,7 +1704,7 @@ export class PigeonGame {
       const moving = Math.hypot(p.x - m.x, p.z - m.z) > 0.05;
       m.pg.group.position.set(m.x, 0, m.z);
       m.pg.group.rotation.y = m.ry;
-      animBird(m.pg, moving ? 3 : 0, 1 / 60, !!p.crouch, now / 1000);
+      animBird(m.pg, { speed: moving ? 3 : 0, dt: 1 / 60, t: now / 1000, crouch: !!p.crouch });
     }
   }
 

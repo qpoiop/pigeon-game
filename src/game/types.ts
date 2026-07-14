@@ -14,6 +14,30 @@ export interface Bird {
   idleT: number;
   baseHeadY: number;
   baseHeadZ: number;
+  // eased procedural-animation state (see animBird)
+  crouchBlend: number;
+  leanX: number;
+  leanZ: number;
+  lookY: number;
+  /** Body's authored silhouette scale, so dash squash/stretch multiplies rather than replaces it. */
+  baseScaleY: number;
+  baseScaleZ: number;
+}
+
+/** Per-frame inputs that drive the layered bird animation. */
+export interface AnimInput {
+  /** World-space movement speed (m/s). */
+  speed: number;
+  dt: number;
+  /** Global time (s). */
+  t: number;
+  crouch: boolean;
+  /** Signed turn amount toward the desired heading (radians); banks the body. */
+  turn?: number;
+  /** Dash intensity 0..1 (1 = just launched); adds a lunge + stretch. */
+  dash?: number;
+  /** Desired head yaw relative to facing (radians) — glance toward a threat/goal. */
+  lookYaw?: number;
 }
 
 /** The player's bird carries movement state and the smoke shell. */
