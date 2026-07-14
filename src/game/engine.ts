@@ -16,6 +16,7 @@ import { LEVELS, type LevelDef } from '../data/levels';
 import { Sfx } from './audio';
 import { Net } from './net';
 import { makeBird, makeBang, makeLabel, animBird } from './birds';
+import { preloadBirdModels, birdModel } from './assets';
 import { clamp, angleDelta } from './anim';
 import { NavGrid } from './ai/navgrid';
 import { findPath } from './ai/pathfind';
@@ -169,6 +170,9 @@ export class PigeonGame {
     this.setupInput();
     this.setupHudButtons();
     this.showTitle();
+    // load any registered 3D bird models in the background; spawns before this
+    // resolves (or when MODELS is empty) fall back to the procedural makeBird.
+    void preloadBirdModels();
     this.loop();
   }
 
@@ -238,7 +242,7 @@ export class PigeonGame {
   private spawnPlayer(): void {
     const old = this.player as Player | undefined;
     const C = CHARS[this.charId];
-    const p = makeBird(C.pal, C.kind) as Player;
+    const p = (birdModel(C.kind) ?? makeBird(C.pal, C.kind)) as Player;
     p.pos = old ? old.pos : new THREE.Vector2(0, 0);
     p.facing = old ? old.facing : 0;
     p.crouch = false;
@@ -433,7 +437,9 @@ export class PigeonGame {
     const D = DIFFS[this.diffId];
     for (let gI = 0; gI < L.guards.length; gI++) {
       const gd = L.guards[gI];
-      const pg = makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
+      const pg =
+        birdModel('guard') ??
+        makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
       pg.group.scale.setScalar(1.12);
       this.levelGroup.add(pg.group);
       const range = gd.range * D.gr;
@@ -1961,7 +1967,9 @@ export class PigeonGame {
           disposeObject(m.pg.group);
         }
         const kind = CHARS[p.char] ? CHARS[p.char].kind : 'pigeon';
-        const pg = makeBird({ body: 0xb9b6b3, head: 0x8a8683, wing: 0x6d6a67, accent: 0x8a8683 }, kind);
+        const pg =
+          birdModel(kind) ??
+          makeBird({ body: 0xb9b6b3, head: 0x8a8683, wing: 0x6d6a67, accent: 0x8a8683 }, kind);
         const label = makeLabel(p.name || '요원');
         label.position.y = 1.9;
         pg.group.add(label);
