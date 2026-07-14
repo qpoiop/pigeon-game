@@ -2,7 +2,8 @@ name: Deploy pigeonoid
 
 # 프론트(React SPA) → Cloudflare Pages (project: pigeonoid)
 # WS API(Worker+DO)  → Cloudflare Workers (service: pigeonoid-worker)
-# production 브랜치에 푸시하면 배포. 패키지 매니저: pnpm.
+# main 브랜치에 푸시하면 배포(수동 실행도 가능). 패키지 매니저: pnpm.
+# ※ 프로모트형(별도 production 브랜치) 배포를 원하면 아래 branches를 [production]으로 바꾸면 됨.
 #
 # 필요한 repo secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   (.env 의 CF_API_TOKEN)
@@ -13,7 +14,8 @@ name: Deploy pigeonoid
 #                    설정하지 않으면 프론트는 무료 공개 릴레이로 폴백(싱글은 무관).
 on:
   push:
-    branches: [production]
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: deploy-${{ github.ref }}

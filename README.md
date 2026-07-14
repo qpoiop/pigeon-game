@@ -65,7 +65,8 @@ pnpm test          # vitest — 경비 길찾기 + 애니메이션 수학 단위
 
 ## 배포 (Cloudflare)
 
-`production` 브랜치에 푸시하면 `.github/workflows/deploy.yml`이 두 가지를 배포한다.
+`main` 브랜치에 푸시하면(또는 Actions 탭에서 수동 실행하면) `.github/workflows/deploy.yml`이
+두 가지를 배포한다. 프로모트형 배포를 원하면 워크플로의 `branches`를 `[production]`으로 바꾼다.
 
 | 대상 | 서비스 | 무엇 |
 | --- | --- | --- |

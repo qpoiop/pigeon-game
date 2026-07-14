@@ -28,7 +28,7 @@ pnpm dev                 # 로컬 실행: http://127.0.0.1:8787  (WS: ws://127.0
 
 ## 배포
 
-`production` 브랜치 푸시 시 `.github/workflows/deploy.yml`의 `worker` 잡이
+`main` 브랜치 푸시(또는 Actions 수동 실행) 시 `.github/workflows/deploy.yml`의 `worker` 잡이
 `wrangler deploy`로 배포한다. 수동 배포는 `pnpm deploy`.
 
 배포 후 workers.dev URL(예: `wss://pigeonoid-worker.<계정서브도메인>.workers.dev/ws`)을
