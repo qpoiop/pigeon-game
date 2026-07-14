@@ -2,6 +2,15 @@ name = "pigeonoid-worker"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
+# Abuse / cost guards — read by src/index.ts. Tune without code changes.
+[vars]
+# Origin whitelist for the WS upgrade (CSV). Empty/unset = allow all (dev only).
+ALLOWED_ORIGINS = "https://pigeonoid.pages.dev,http://localhost:5173,http://127.0.0.1:5173"
+MAX_PEERS = "8"        # max concurrent sockets per room (가용량)
+MSG_RATE = "40"        # sustained messages/sec per socket (rate limit)
+MSG_BURST = "80"       # burst bucket capacity per socket
+MAX_MSG_BYTES = "16384" # max bytes of a single relayed message
+
 # One Durable Object instance per room code holds that room's WebSockets.
 [[durable_objects.bindings]]
 name = "ROOMS"
