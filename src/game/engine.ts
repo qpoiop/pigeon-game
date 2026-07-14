@@ -29,11 +29,17 @@ import type {
   Film,
   GameOptions,
   Guard,
+  GuardSnap,
+  GuardState,
   Item,
   Particle,
   Player,
   PeerMesh,
+  World,
 } from './types';
+
+/** GuardState <-> snapshot index, shared by host serialise and guest apply. */
+const GSTATES: GuardState[] = ['patrol', 'chase', 'lured', 'search'];
 
 type Mode = 'menu' | 'brief' | 'play' | 'fail' | 'clear';
 
@@ -79,6 +85,12 @@ export class PigeonGame {
   // shared squad alarm — most recent known player location (for coordinated search)
   private alarmX = 0;
   private alarmZ = 0;
+
+  // co-op: monotonically increasing snapshot sequence (host → guest)
+  private worldSeq = 0;
+  // co-op: whether each agent is currently holding the exit zone (for the snapshot)
+  private coHostEsc = 0;
+  private coGuestEsc = 0;
 
   // scoring / progression (persisted in localStorage)
   private stageTime = 0;
@@ -1294,6 +1306,12 @@ export class PigeonGame {
           P.facing += da * Math.min(1, dt * 10);
           pTurn = da;
         }
+        // --- co-op role: guest renders the host's snapshot; host/solo simulate ---
+        const coRole = this.net.role();
+        const gp = coRole === 'host' ? this.guestPos() : null;
+        if (coRole === 'guest') {
+          this.applyWorld(dt, t);
+        } else {
         // films
         for (let f = 0; f < this.films.length; f++) {
           const fl = this.films[f];
@@ -1339,18 +1357,26 @@ export class PigeonGame {
             this.decoys.splice(dI, 1);
           }
         }
-        // extraction
+        // extraction — co-op: both agents must hold the exit zone together
         const ex = this.level.extract;
         const ready = this.filmCount === this.films.length;
         (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = ready
           ? 0.28 + Math.sin(t * 5) * 0.12
           : 0.08;
-        if (ready && Math.abs(P.pos.x - ex[0]) < ex[2] / 2 && Math.abs(P.pos.y - ex[1]) < ex[3] / 2) {
+        const inExit = (ax: number, az: number) =>
+          Math.abs(ax - ex[0]) < ex[2] / 2 && Math.abs(az - ex[1]) < ex[3] / 2;
+        this.coHostEsc = ready && inExit(P.pos.x, P.pos.y) ? 1 : 0;
+        this.coGuestEsc = ready && gp && inExit(gp.x, gp.z) ? 1 : 0;
+        if (this.coHostEsc === 1 && (!gp || this.coGuestEsc === 1)) {
           this.extractT += dt;
-          this.$('.pg-objective').textContent =
-            '탈출 중… ' + Math.min(100, Math.round((this.extractT / 1.2) * 100)) + '%';
+          const pct = Math.min(100, Math.round((this.extractT / 1.2) * 100));
+          this.$('.pg-objective').textContent = (gp ? '동반 탈출 중… ' : '탈출 중… ') + pct + '%';
           if (this.extractT > 1.2) this.clearStage();
-        } else this.extractT = 0;
+        } else {
+          this.extractT = 0;
+          if (this.coHostEsc === 1 && gp && this.coGuestEsc === 0)
+            this.$('.pg-objective').textContent = '동료의 탈출을 기다리는 중…';
+        }
         // objective arrow — point at nearest un-got film, or the exit once ready
         let atx: number | null = null;
         let atz: number | null = null;
@@ -1396,10 +1422,19 @@ export class PigeonGame {
           const G = this.guards[gI];
           let gSpeed = 0;
           if (G.state === 'chase') {
-            const cdx = P.pos.x - G.pos.x;
-            const cdz = P.pos.y - G.pos.y;
-            const cd = Math.hypot(cdx, cdz);
-            const fg = flankPoint(P.pos.x, P.pos.y, this.lax, this.laz, chasers.indexOf(G), chasers.length);
+            // chase whichever agent is nearest — host player or, on host, the guest
+            let ctx = P.pos.x;
+            let ctz = P.pos.y;
+            if (gp) {
+              const dh = Math.hypot(P.pos.x - G.pos.x, P.pos.y - G.pos.y);
+              const dgs = Math.hypot(gp.x - G.pos.x, gp.z - G.pos.y);
+              if (dgs < dh) {
+                ctx = gp.x;
+                ctz = gp.z;
+              }
+            }
+            const cd = Math.hypot(ctx - G.pos.x, ctz - G.pos.y);
+            const fg = flankPoint(ctx, ctz, this.lax, this.laz, chasers.indexOf(G), chasers.length);
             const wp = this.guardWaypoint(G, fg.x, fg.z, dt);
             const mdx = wp.x - G.pos.x;
             const mdz = wp.z - G.pos.y;
@@ -1413,12 +1448,11 @@ export class PigeonGame {
             }
             this.collide(G.pos, 0.55);
             if (cd < 0.95) this.fail();
-            const seeNow =
-              !hidden && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y) && cd < G.range * 1.5;
+            const seeNow = !hidden && this.los(G.pos.x, G.pos.y, ctx, ctz) && cd < G.range * 1.5;
             if (seeNow) {
               G.loseT = 0;
-              G.lsx = P.pos.x;
-              G.lsz = P.pos.y;
+              G.lsx = ctx;
+              G.lsz = ctz;
             } else {
               G.loseT += dt;
               if (G.loseT > 2.4) {
@@ -1577,6 +1611,29 @@ export class PigeonGame {
               }
             } else G.detect = Math.max(0, G.detect - dt / 1.2);
           }
+          // co-op: a non-chasing guard can also notice the guest and flip to chase
+          if (gp && G.state !== 'chase') {
+            const ggx = gp.x - G.pos.x;
+            const ggz = gp.z - G.pos.y;
+            const ggd = Math.hypot(ggx, ggz);
+            if (!hidden && ggd < G.range * (gp.crouch ? 0.55 : 1)) {
+              let gga = Math.atan2(ggx, ggz) - G.facing;
+              while (gga > Math.PI) gga -= Math.PI * 2;
+              while (gga < -Math.PI) gga += Math.PI * 2;
+              if (Math.abs(gga) < G.fov / 2 && this.los(G.pos.x, G.pos.y, gp.x, gp.z)) {
+                G.detect = Math.min(1, G.detect + dt / D.dt);
+                if (G.detect >= 1) {
+                  G.state = 'chase';
+                  G.loseT = 0;
+                  G.bang.visible = true;
+                  this.sfx.alert();
+                  this.spotted++;
+                  this.alarmX = gp.x;
+                  this.alarmZ = gp.z;
+                }
+              }
+            }
+          }
           maxDetect = Math.max(maxDetect, G.state === 'chase' ? 1 : G.detect);
           const gw = G.state === 'chase' ? 2 : G.detect;
           if (gw > threatW) {
@@ -1603,6 +1660,17 @@ export class PigeonGame {
             0.7,
           );
         }
+        if (coRole === 'host') {
+          // include the transition so the guest ends the stage in lock-step
+          // (cast: fail()/clearStage() above may have moved mode off 'play')
+          const m = this.mode as Mode;
+          const failFlag = m === 'fail' ? 1 : 0;
+          const clearedFlag = m !== 'play' && !failFlag ? 1 : 0;
+          this.net.sendWorld(
+            this.buildWorld(maxDetect, this.coHostEsc, this.coGuestEsc, clearedFlag, failFlag),
+          );
+        }
+        } // end host/solo simulation branch
         this.net.send(P, this.stageIdx, this.charId);
       }
       P.group.position.set(P.pos.x, 0, P.pos.y);
@@ -1637,6 +1705,111 @@ export class PigeonGame {
       this.renderer.render(this.scene, this.camera);
     };
     this.rafId = requestAnimationFrame(frame);
+  }
+
+  /* ---------- Co-op (host-authoritative world sync) ---------- */
+
+  /** Host side: the live guest's position (2-player — the single recent peer). */
+  private guestPos(): { x: number; z: number; crouch: boolean } | null {
+    const now = performance.now();
+    for (const id in this.net.peers) {
+      const p = this.net.peers[id];
+      if (now - p.seen > 5000) continue;
+      return { x: p.x, z: p.z, crouch: p.crouch === 1 };
+    }
+    return null;
+  }
+
+  /** Host side: serialise the authoritative world for broadcast to the guest. */
+  private buildWorld(alert: number, he: number, ge: number, cleared: number, fail: number): World {
+    const guards: GuardSnap[] = this.guards.map((G) => ({
+      x: +G.pos.x.toFixed(2),
+      z: +G.pos.y.toFixed(2),
+      ry: +G.facing.toFixed(2),
+      s: GSTATES.indexOf(G.state),
+      d: +G.detect.toFixed(2),
+    }));
+    let films = 0;
+    this.films.forEach((f, i) => {
+      if (f.got) films |= 1 << i;
+    });
+    let items = 0;
+    this.items.forEach((it, i) => {
+      if (it.got) items |= 1 << i;
+    });
+    return {
+      seq: ++this.worldSeq,
+      guards,
+      films,
+      items,
+      ax: +this.alarmX.toFixed(2),
+      az: +this.alarmZ.toFixed(2),
+      alert: +alert.toFixed(2),
+      ready: this.filmCount === this.films.length ? 1 : 0,
+      he,
+      ge,
+      cleared,
+      fail,
+    };
+  }
+
+  /**
+   * Guest side: render the host's authoritative snapshot instead of simulating.
+   * Guards are posed from the snapshot; taken films/items are hidden; alarm and
+   * HUD mirror the host; a cleared/failed flag ends the stage in lock-step.
+   */
+  private applyWorld(dt: number, t: number): void {
+    const w = this.net.world;
+    if (!w) return;
+    for (let i = 0; i < this.guards.length && i < w.guards.length; i++) {
+      const G = this.guards[i];
+      const s = w.guards[i];
+      const moved = Math.hypot(s.x - G.pos.x, s.z - G.pos.y);
+      G.pos.x = s.x;
+      G.pos.y = s.z;
+      G.facing = s.ry;
+      G.state = GSTATES[s.s] ?? 'patrol';
+      G.detect = s.d;
+      (G.cone.material as THREE.MeshBasicMaterial).opacity =
+        0.08 + G.detect * 0.18 + (G.state === 'chase' ? 0.14 : 0);
+      G.bang.visible = G.state === 'chase';
+      G.model.group.position.set(G.pos.x, 0, G.pos.y);
+      G.model.group.rotation.y = G.facing;
+      animBird(G.model, {
+        speed: Math.min(moved / Math.max(dt, 1e-3), G.speed * 1.65),
+        dt,
+        t: t + i * 3,
+        crouch: false,
+      });
+    }
+    let filmDelta = false;
+    for (let i = 0; i < this.films.length; i++) {
+      if (w.films & (1 << i) && !this.films[i].got) {
+        this.films[i].got = true;
+        this.films[i].mesh.visible = false;
+        filmDelta = true;
+      }
+    }
+    if (filmDelta) {
+      this.filmCount = this.films.filter((f) => f.got).length;
+      this.updFilms();
+      this.updDrawer();
+    }
+    for (let i = 0; i < this.items.length; i++) {
+      if (w.items & (1 << i) && !this.items[i].got) {
+        this.items[i].got = true;
+        this.items[i].mesh.visible = false;
+      }
+    }
+    this.alarmX = w.ax;
+    this.alarmZ = w.az;
+    const ready = w.ready === 1;
+    (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = ready
+      ? 0.28 + Math.sin(t * 5) * 0.12
+      : 0.08;
+    this.$<HTMLElement>('.pg-alertfill').style.width = w.alert * 100 + '%';
+    if (w.fail === 1) this.fail();
+    else if (w.cleared === 1) this.clearStage();
   }
 
   /** 2D minimap: walls, covers, films, items, exit, guards (by state), peers, player. */
