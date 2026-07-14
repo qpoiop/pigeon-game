@@ -115,6 +115,10 @@ export class PigeonGame {
   // loop state
   private last = 0;
   private camPos = new THREE.Vector3(0, 16, 14);
+  // game-feel / juice: decaying camera shake, hit-stop slow-mo, zoom punch
+  private shakeAmp = 0;
+  private hitStop = 0;
+  private zoomKick = 0;
   private rosterT = 0;
   private mapT = 0;
   private lax = 0;
@@ -769,6 +773,7 @@ export class PigeonGame {
     const now = performance.now() / 1000;
     if (now - this.dashT < CHARS[this.charId].dashCd) return;
     this.dashT = now;
+    this.addShake(0.12);
     this.sfx.ensure();
     this.sfx.dash();
     if (this.player) this.burst(this.player.pos.x, this.player.pos.y, 0xc9c6c3, 5);
@@ -793,6 +798,28 @@ export class PigeonGame {
       });
     }
   }
+
+  /* ---------- Game feel / juice ---------- */
+  /** Add decaying camera shake (amplitude in world units), capped. */
+  private addShake(a: number): void {
+    this.shakeAmp = Math.min(0.8, this.shakeAmp + a);
+  }
+  /** Request a hit-stop of `sec` seconds (slow-mo impact freeze). */
+  private freeze(sec: number): void {
+    this.hitStop = Math.max(this.hitStop, sec);
+  }
+  /** Punch the camera in by `m` metres, easing back out. */
+  private kickZoom(m: number): void {
+    this.zoomKick = Math.min(4, Math.max(this.zoomKick, m));
+  }
+  /** Bundled "you've been spotted" feedback: sound + shake + freeze + zoom. */
+  private alarm(): void {
+    this.sfx.alert();
+    this.addShake(0.34);
+    this.freeze(0.07);
+    this.kickZoom(1.8);
+  }
+
   private useDecoy(): void {
     if (this.mode !== 'play') return;
     if (this.inv.decoy <= 0) {
@@ -1065,6 +1092,10 @@ export class PigeonGame {
   private fail(): void {
     if (this.mode !== 'play') return;
     this.mode = 'fail';
+    // heavy impact on capture
+    this.addShake(0.55);
+    this.freeze(0.14);
+    this.kickZoom(2.4);
     this.sfx.stopAmb();
     this.sfx.fail();
     this.overlay(
@@ -1225,8 +1256,11 @@ export class PigeonGame {
     this.last = performance.now();
     const frame = (now: number) => {
       this.rafId = requestAnimationFrame(frame);
-      const dt = Math.min((now - this.last) / 1000, 0.05);
+      const realDt = Math.min((now - this.last) / 1000, 0.05);
       this.last = now;
+      // hit-stop: briefly crush the sim step to ~0 for impact on big events
+      if (this.hitStop > 0) this.hitStop -= realDt;
+      const dt = this.hitStop > 0 ? realDt * 0.06 : realDt;
       const t = now / 1000;
       const P = this.player;
       const C = CHARS[this.charId];
@@ -1322,6 +1356,8 @@ export class PigeonGame {
             fl.got = true;
             fl.mesh.visible = false;
             this.burst(fl.x, fl.z, ACCENT, 10);
+            this.addShake(0.1);
+            this.kickZoom(0.6);
             this.filmCount++;
             this.updFilms();
             this.updDrawer();
@@ -1340,6 +1376,7 @@ export class PigeonGame {
             itm.got = true;
             itm.mesh.visible = false;
             this.burst(itm.x, itm.z, MID, 8);
+            this.addShake(0.07);
             this.inv[itm.t]++;
             this.updInv();
             this.updDrawer();
@@ -1506,7 +1543,7 @@ export class PigeonGame {
                   G.state = 'chase';
                   G.loseT = 0;
                   G.bang.visible = true;
-                  this.sfx.alert();
+                  this.alarm();
                   this.spotted++;
                   this.alarmX = P.pos.x;
                   this.alarmZ = P.pos.y;
@@ -1589,7 +1626,7 @@ export class PigeonGame {
                 G.state = 'chase';
                 G.loseT = 0;
                 G.bang.visible = true;
-                this.sfx.alert();
+                this.alarm();
                 this.spotted++;
                 this.alarmX = P.pos.x;
                 this.alarmZ = P.pos.y;
@@ -1626,7 +1663,7 @@ export class PigeonGame {
                   G.state = 'chase';
                   G.loseT = 0;
                   G.bang.visible = true;
-                  this.sfx.alert();
+                  this.alarm();
                   this.spotted++;
                   this.alarmX = gp.x;
                   this.alarmZ = gp.z;
@@ -1685,13 +1722,23 @@ export class PigeonGame {
         lookYaw: pLook,
       });
       this.updatePeers();
-      const cd2 = this.camDist;
+      // zoom punch eases the camera in on impact, then relaxes back out
+      if (this.zoomKick > 0.001) this.zoomKick = Math.max(0, this.zoomKick - realDt * 4);
+      const cd2 = this.camDist - this.zoomKick;
       const lax = this.mode === 'play' ? this.lax : 0;
       const laz = this.mode === 'play' ? this.laz : 0;
       this.lookX += (lax - this.lookX) * Math.min(1, dt * 2);
       this.lookZ += (laz - this.lookZ) * Math.min(1, dt * 2);
       this.camPos.set(P.pos.x + this.lookX, cd2, P.pos.y + this.lookZ + cd2 * 0.72);
       this.camera.position.lerp(this.camPos, Math.min(1, dt * 4));
+      // decaying screen shake, applied after the lerp so it stays punchy
+      if (this.shakeAmp > 0.001) {
+        this.shakeAmp = Math.max(0, this.shakeAmp - realDt * 2.4);
+        const a = this.shakeAmp;
+        this.camera.position.x += (Math.random() * 2 - 1) * a;
+        this.camera.position.z += (Math.random() * 2 - 1) * a;
+        this.camera.position.y += (Math.random() * 2 - 1) * a * 0.4;
+      }
       this.camera.lookAt(P.pos.x + this.lookX * 0.7, 0.4, P.pos.y + this.lookZ * 0.7);
       this.sun.position.set(P.pos.x + 14, 26, P.pos.y + 10);
       this.sun.target.position.set(P.pos.x, 0, P.pos.y);
