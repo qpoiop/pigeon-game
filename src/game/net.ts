@@ -1,5 +1,5 @@
 import { Voice, type Signaler, type SignalKind } from './voice';
-import type { Peer, Player } from './types';
+import type { Peer, Player, World } from './types';
 import type { CharId } from '../data/characters';
 
 export type NetState = 'off' | 'connecting' | 'on';
@@ -35,6 +35,10 @@ export class Net implements Signaler {
   peers: Record<string, Peer> = {};
   lastSend = 0;
   voice: Voice;
+  /** Latest host-authoritative snapshot (guest side); null until one arrives. */
+  world: World | null = null;
+  worldSeen = 0;
+  private lastWorld = 0;
   private onStatus: () => void;
 
   constructor(onStatus: () => void) {
@@ -79,6 +83,15 @@ export class Net implements Signaler {
           return;
         }
         if (!m || m.g !== PROTOCOL_TAG || m.room !== this.room || m.id === this.id) return;
+        if (m.t === 'world') {
+          // Only accept the room host's snapshot (host = lexicographically
+          // smallest id), so a stray guest broadcast can't hijack the sim.
+          if ((m.id as string) < this.id) {
+            this.world = m.w as World;
+            this.worldSeen = performance.now();
+          }
+          return;
+        }
         if (m.t === 'rtc') {
           if (m.to === this.id)
             void this.voice.handleSignal(m.id as string, m.kind as SignalKind, m.data);
@@ -134,6 +147,39 @@ export class Net implements Signaler {
           v: this.voice.enabled && !this.voice.muted ? 1 : 0,
         }),
       );
+    } catch {
+      /* relay dropped */
+    }
+  }
+
+  /**
+   * Room role for the co-op sim. With no live peer we run the game solo; with
+   * one connected the lexicographically smallest id is the authoritative host,
+   * the other is the guest. Deterministic, so both ends agree without a
+   * handshake. A peer is "live" only if seen recently (drops stale ghosts).
+   */
+  role(): 'solo' | 'host' | 'guest' {
+    if (this.status !== 'on') return 'solo';
+    const now = performance.now();
+    let min = this.id;
+    let live = false;
+    for (const pid in this.peers) {
+      if (now - this.peers[pid].seen > 5000) continue;
+      live = true;
+      if (pid < min) min = pid;
+    }
+    if (!live) return 'solo';
+    return this.id === min ? 'host' : 'guest';
+  }
+
+  /** Host: broadcast the authoritative world snapshot to the room (~15Hz). */
+  sendWorld(w: World): void {
+    if (!this.ws || this.ws.readyState !== 1) return;
+    const now = performance.now();
+    if (now - this.lastWorld < 66) return;
+    this.lastWorld = now;
+    try {
+      this.ws.send(JSON.stringify({ g: PROTOCOL_TAG, room: this.room, id: this.id, t: 'world', w }));
     } catch {
       /* relay dropped */
     }

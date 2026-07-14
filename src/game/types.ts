@@ -150,6 +150,42 @@ export interface PeerMesh {
   char: CharId;
 }
 
+/** One guard's authoritative pose in a host→guest world snapshot. */
+export interface GuardSnap {
+  x: number;
+  z: number;
+  ry: number;
+  /** GuardState index: 0 patrol, 1 chase, 2 lured, 3 search. */
+  s: number;
+  /** detect 0..1 (drives the cone colour / bang). */
+  d: number;
+}
+
+/**
+ * Host-authoritative world snapshot broadcast to the guest ~15Hz. The host owns
+ * the guard AI, pickups, alarm and win/lose; the guest renders this instead of
+ * running its own simulation. Films/items are bitmasks (bit i = entry i taken)
+ * to stay well under the relay's per-message byte cap.
+ */
+export interface World {
+  seq: number;
+  guards: GuardSnap[];
+  films: number;
+  items: number;
+  ax: number;
+  az: number;
+  /** HUD alert level 0..1 (max guard detect). */
+  alert: number;
+  /** 1 once every film is collected (exit armed). */
+  ready: number;
+  /** Per-player escape flags for the co-op clear. */
+  he: number;
+  ge: number;
+  cleared: number;
+  /** 1 when a guard caught either agent — shared mission fail. */
+  fail: number;
+}
+
 export interface GameOptions {
   showCones: boolean;
   camDist: number;
