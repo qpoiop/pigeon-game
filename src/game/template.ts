@@ -99,6 +99,18 @@ export const CSS =
   '.pg-card:hover .ds,.pg-card:active .ds{color:rgba(243,242,242,.85)}' +
   '.pg-card .lv{font:800 11px/1 inherit;letter-spacing:.08em;color:#ec3013;flex:none;white-space:nowrap}' +
   '.pg-card:hover .lv,.pg-card:active .lv{color:#f3f2f2}' +
+  // dark backdrop variant (augment-select screen)
+  '.pg-overlay.pg-dark{background:rgba(18,15,14,.92)}' +
+  '.pg-overlay.pg-dark .pg-panel{background:#1c1917;border-color:#3a332e;color:#f3f2f2}' +
+  '.pg-overlay.pg-dark .pg-panel .hd{border-color:#3a332e}' +
+  '.pg-overlay.pg-dark .pg-panel h1{color:#f3f2f2}' +
+  '.pg-overlay.pg-dark .pg-panel .bd{color:#c9c6c3}' +
+  '.pg-overlay.pg-dark .pg-rules li{border-color:#3a332e;color:#c9c6c3}' +
+  '.pg-overlay.pg-dark .pg-rules b{color:#8a8683}' +
+  '.pg-overlay.pg-dark .pg-card{background:#26221f;border-color:#4a423b;color:#f3f2f2}' +
+  '.pg-overlay.pg-dark .pg-card .ds{color:#a8a29b}' +
+  '.pg-overlay.pg-dark .pg-btn{background:#26221f;border-color:#4a423b;color:#f3f2f2}' +
+  '.pg-overlay.pg-dark .pg-btn.ghost{background:transparent}' +
   '.pg-bosshp{position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(440px,74%);display:none;text-align:center;pointer-events:none}' +
   '.pg-bosshp.show{display:block}' +
   '.pg-bosshp .l{font:800 10px/1 inherit;letter-spacing:.2em;color:#ec3013;text-transform:uppercase}' +

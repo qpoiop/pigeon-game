@@ -507,34 +507,32 @@ export class PigeonGame {
     exEdge.rotation.x = -Math.PI / 2;
     exEdge.position.y = 0.04;
     exg.add(exEdge);
+    // a clear floor sign that reads "탈출 / EXIT" (lights up once unlocked)
+    const cv = document.createElement('canvas');
+    cv.width = 256;
+    cv.height = 256;
+    const cc = cv.getContext('2d')!;
+    cc.clearRect(0, 0, 256, 256);
+    cc.fillStyle = '#ec3013';
+    cc.textAlign = 'center';
+    cc.font = '900 128px sans-serif';
+    cc.fillText('탈출', 128, 118);
+    cc.font = '900 40px sans-serif';
+    cc.fillText('E X I T', 128, 176);
+    cc.font = '900 44px sans-serif';
+    cc.fillText('▲', 128, 224);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
     const exFill = new THREE.Mesh(
-      new THREE.PlaneGeometry(ex[2], ex[3]),
-      new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.12 }),
+      new THREE.PlaneGeometry(ex[2] * 1.15, ex[3] * 1.15),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.85, depthWrite: false }),
     );
     exFill.rotation.x = -Math.PI / 2;
-    exFill.position.y = 0.035;
+    // point the ▲ toward the map interior (away from the border it sits on)
+    exFill.rotation.z = Math.atan2(-ex[0], -ex[1]);
+    exFill.position.y = 0.04;
     exg.add(exFill);
-    // a real exit door: two posts + lintel + a leaf that lifts once it unlocks
-    const doorW = Math.max(3, ex[2]);
-    const postH = 3.2;
-    const frameMat2 = new THREE.MeshLambertMaterial({ color: 0x201e1d });
-    for (const px of [-doorW / 2, doorW / 2]) {
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.45, postH, 0.7), frameMat2);
-      p.position.set(px, postH / 2, 0);
-      p.castShadow = true;
-      exg.add(p);
-    }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorW + 0.9, 0.5, 0.7), frameMat2);
-    lintel.position.set(0, postH + 0.25, 0);
-    exg.add(lintel);
-    const leaf = new THREE.Mesh(
-      new THREE.BoxGeometry(doorW - 0.25, postH - 0.2, 0.28),
-      new THREE.MeshLambertMaterial({ color: ACCENT }),
-    );
-    this.doorBaseY = (postH - 0.2) / 2;
-    leaf.position.set(0, this.doorBaseY, 0);
-    exg.add(leaf);
-    this.doorLeaf = leaf;
+    this.doorLeaf = undefined;
     this.doorOpen = false;
     exg.position.set(ex[0], 0, ex[1]);
     this.levelGroup.add(exg);
@@ -1689,9 +1687,10 @@ export class PigeonGame {
   }
 
   /* ---------- Overlays ---------- */
-  private overlay(html: string): void {
+  private overlay(html: string, dark = false): void {
     const ov = this.$<HTMLElement>('.pg-overlay');
     ov.innerHTML = html;
+    ov.classList.toggle('pg-dark', dark);
     ov.classList.add('show');
     ov.style.pointerEvents = 'auto';
   }
@@ -2136,6 +2135,7 @@ export class PigeonGame {
             ? ''
             : '<button class="pg-btn pg-next">다음 스테이지 →</button>') +
         '<button class="pg-btn ghost pg-menu">타이틀로</button></div></div>',
+      true, // dark backdrop for the augment-select screen
     );
     if (last) {
       this.$('.pg-again').addEventListener('click', () => this.startStage(0));
@@ -2466,8 +2466,8 @@ export class PigeonGame {
           if (open && !this.doorOpen) this.sfx.clear();
           this.doorOpen = open;
           (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = open
-            ? 0.3 + Math.sin(t * 5) * 0.12
-            : 0.05;
+            ? 0.8 + Math.sin(t * 6) * 0.2
+            : 0.32;
           if (open) {
             this.$('.pg-objective').textContent = '탈출구 개방 — 문으로 탈출하라';
             const atExit =
