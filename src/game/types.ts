@@ -136,6 +136,8 @@ export interface Guard {
   hurtFlash: number;
   /** Seconds spent making no patrol progress (anti-stuck safety). */
   stuckT: number;
+  /** Aggro timer (s): >0 = alerted (engages); decays when the player is far/unseen. */
+  aggro: number;
   /** Attacker behaviour. */
   gtype: GuardType;
   /** Last attack time (s) for cooldown. */

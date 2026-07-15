@@ -556,6 +556,7 @@ export class PigeonGame {
         hpbar,
         hurtFlash: 0,
         stuckT: 0,
+        aggro: 0,
         path: gd.path,
         seg: 0,
         speed: gd.speed * D.gs,
@@ -980,6 +981,10 @@ export class PigeonGame {
       this.skillRelease();
     });
     this.$('.pg-b-skill').addEventListener('pointercancel', () => this.skillRelease());
+    this.$('.pg-b-attack').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.attack();
+    });
     this.$('.pg-b-dash').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.dash();
@@ -1068,43 +1073,6 @@ export class PigeonGame {
   /* ---------- Combat ---------- */
 
   /** Player attack — melee arc (downs guards in front) or a ranged projectile. */
-  /** Auto-combat: face + strike the nearest enemy in reach (no need to tap 공격). */
-  private autoAttack(t: number): void {
-    const P = this.player;
-    if (this.mode !== 'play' || P.downed || this.aiming) return;
-    const cb = CHARS[this.charId].combat;
-    if (t - P.atkT < cb.atkCd) return;
-    let bx = 0;
-    let bz = 0;
-    let bd = 1e9;
-    let found = false;
-    for (const G of this.guards) {
-      if (G.down) continue;
-      const d = Math.hypot(G.pos.x - P.pos.x, G.pos.y - P.pos.y);
-      if (d < bd) {
-        bd = d;
-        bx = G.pos.x;
-        bz = G.pos.y;
-        found = true;
-      }
-    }
-    const bs = this.boss;
-    if (bs && bs.hp > 0) {
-      const d = Math.hypot(bs.pos.x - P.pos.x, bs.pos.y - P.pos.y) - 1.6;
-      if (d < bd) {
-        bd = d;
-        bx = bs.pos.x;
-        bz = bs.pos.y;
-        found = true;
-      }
-    }
-    const reach = cb.atk === 'ranged' ? cb.range : cb.range + 0.6;
-    if (!found || bd > reach) return;
-    if (cb.atk === 'ranged' && !this.los(P.pos.x, P.pos.y, bx, bz)) return; // don't shoot through walls
-    P.facing = Math.atan2(bx - P.pos.x, bz - P.pos.y);
-    this.attack();
-  }
-
   private attack(): void {
     if (this.mode !== 'play' || this.player.downed) return;
     const P = this.player;
@@ -1272,6 +1240,7 @@ export class PigeonGame {
   private damageGuard(G: Guard, dmg: number): void {
     if (G.down) return;
     G.hp -= dmg;
+    G.aggro = 3; // getting hit alerts the guard even without line of sight
     G.hurtFlash = 1;
     G.hpbar.visible = true;
     G.hpbar.scale.x = 1.2 * Math.max(0, G.hp / G.maxHp);
@@ -1393,6 +1362,7 @@ export class PigeonGame {
     };
     slot('.pg-b-skill', P.skillT, C.skill.cd);
     slot('.pg-b-dash', this.dashT, C.dashCd);
+    this.$('.pg-b-attack').classList.toggle('dim', t - P.atkT < C.combat.atkCd);
   }
 
   /* ---------- Boss ---------- */
@@ -2287,8 +2257,6 @@ export class PigeonGame {
             this.arrow.rotation.y = Math.atan2(atx - P.pos.x, atz - P.pos.y);
           } else this.arrow.visible = false;
         }
-        // guards
-        this.autoAttack(t);
         // owl hold-to-aim: a line from the player, clipped at the first wall ahead
         if (this.aiming) {
           const len = this.wallDist(P.pos.x, P.pos.y, P.facing, 16);
@@ -2667,9 +2635,18 @@ export class PigeonGame {
       const dist = Math.hypot(adx, adz) || 0.001;
       const seen = !aHidden && this.los(G.pos.x, G.pos.y, ax, az);
       const cm = acrouch ? 0.6 : 1;
-      const aware = seen && dist <= AWARE * cm;
+      const inAware = seen && dist <= AWARE * cm;
       const inAlert = seen && dist <= ALERT * cm;
-      if (aware || G.wind > 0) {
+      // aggro: alerted while >0. detected when the player gets close (or on a
+      // hit — see damageGuard); decays and drops once the player is far/unseen.
+      if (inAlert) G.aggro = 3;
+      else if (G.aggro > 0)
+        G.aggro = Math.max(0, G.aggro - dt * (!seen || dist > AWARE * cm ? 1.2 : 0.5));
+      const alerted = G.aggro > 0;
+      const aware = !alerted && inAware; // suspicious but keeps patrolling
+      const reach = G.gtype === 'line' ? ALERT * cm : ZR + 0.4;
+      // only lock onto the player once actually alerted; aware guards patrol on
+      if (alerted || G.wind > 0) {
         let da = Math.atan2(adx, adz) - G.facing;
         while (da > Math.PI) da -= Math.PI * 2;
         while (da < -Math.PI) da += Math.PI * 2;
@@ -2689,27 +2666,38 @@ export class PigeonGame {
         tw = 2;
         tx = G.pos.x;
         tz = G.pos.y;
-      } else if (inAlert && t - G.atkCd > cdDur) {
+      } else if (alerted && dist <= reach && t - G.atkCd > cdDur) {
         G.wind = windDur;
         G.aimX = ax;
         G.aimZ = az;
         this.sfx.alert();
         alert = Math.max(alert, 1);
-      } else if (aware) {
-        // suspicious ('?'): stop and watch — no chase until actually alerted
+      } else if (alerted) {
+        // engaged: close in to attack range (chase only after being alerted)
         this.hideZone(G);
-        alert = Math.max(alert, 0.4);
-        if (tw < 1) {
-          tw = 1;
+        const wp = this.guardWaypoint(G, ax, az, dt);
+        const mx = wp.x - G.pos.x;
+        const mz = wp.z - G.pos.y;
+        const m = Math.hypot(mx, mz) || 1;
+        const chSpeed = G.speed * 1.12;
+        G.pos.x += (mx / m) * chSpeed * dt;
+        G.pos.y += (mz / m) * chSpeed * dt;
+        this.collide(G.pos, 0.55);
+        gSpeed = chSpeed;
+        alert = Math.max(alert, 0.85);
+        if (tw < 2) {
+          tw = 2;
           tx = G.pos.x;
           tz = G.pos.y;
         }
       } else {
+        // patrol — aware guards keep walking their route (just a '?' overhead)
         gSpeed = this.patrolStep(G, dt);
         this.hideZone(G);
+        if (aware) alert = Math.max(alert, 0.4);
       }
-      G.bang.visible = inAlert || G.wind > 0;
-      G.qmark.visible = aware && !inAlert && G.wind <= 0;
+      G.bang.visible = alerted || G.wind > 0;
+      G.qmark.visible = aware && G.wind <= 0;
       G.cone.visible = false;
       G.model.group.position.set(G.pos.x, 0, G.pos.y);
       G.model.group.rotation.y = G.facing;
