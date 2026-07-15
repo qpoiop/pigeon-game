@@ -389,12 +389,13 @@ export class PigeonGame {
     const mat = (c: number) => new THREE.MeshLambertMaterial({ color: c });
     // per-level theme gives each stage its own palette; fall back to paper/ink
     const th = L.theme ?? { ground: PAPER, outer: 0xe2e0de, grid: 0xd8d5d3, wall: INK };
-    this.scene.background = new THREE.Color(th.outer); // backdrop matches the stage
+    const VOID = 0x14110f; // black surround + border, so the map reads as an island
+    this.scene.background = new THREE.Color(VOID);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(L.w, L.d), mat(th.ground));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.levelGroup.add(ground);
-    const outer = new THREE.Mesh(new THREE.PlaneGeometry(L.w + 80, L.d + 80), mat(th.outer));
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(L.w + 200, L.d + 200), mat(VOID));
     outer.rotation.x = -Math.PI / 2;
     outer.position.y = -0.02;
     outer.receiveShadow = true;
@@ -412,13 +413,16 @@ export class PigeonGame {
       this.levelGroup.add(b);
       return b;
     };
-    const t = 0.3;
+    // tall black border wall around the whole map (matches the void surround)
+    const borderMat = mat(VOID);
+    const t = 1.2;
+    const bh = 2.8;
     const hw = L.w / 2;
     const hd = L.d / 2;
-    bar(0, -hd - t / 2, L.w + t * 2, t, 0.5);
-    bar(0, hd + t / 2, L.w + t * 2, t, 0.5);
-    bar(-hw - t / 2, 0, t, L.d, 0.5);
-    bar(hw + t / 2, 0, t, L.d, 0.5);
+    bar(0, -hd - t / 2, L.w + t * 2, t, bh, borderMat);
+    bar(0, hd + t / 2, L.w + t * 2, t, bh, borderMat);
+    bar(-hw - t / 2, 0, t, L.d, bh, borderMat);
+    bar(hw + t / 2, 0, t, L.d, bh, borderMat);
 
     this.walls = [];
     for (const wl of L.walls) {

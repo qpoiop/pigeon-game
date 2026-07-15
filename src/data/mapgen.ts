@@ -121,7 +121,15 @@ export function genLevel(o: GenOpts): LevelDef {
   }
 
   const spawn: [number, number] = [cx(sc[0]), cz(sc[1])];
-  const extract: [number, number, number, number] = [cx(ec[0]), cz(ec[1]), cell * 0.9, cell * 0.9];
+  // push the exit out against the border corner so the door sits on the map edge
+  const edX = ec[0] >= gw / 2 ? 1 : -1;
+  const edZ = ec[1] >= gh / 2 ? 1 : -1;
+  const extract: [number, number, number, number] = [
+    cx(ec[0]) + edX * cell * 0.55,
+    cz(ec[1]) + edZ * cell * 0.55,
+    cell * 0.9,
+    cell * 0.9,
+  ];
 
   // collect open cells for guard placement
   const open: [number, number][] = [];
@@ -136,16 +144,23 @@ export function genLevel(o: GenOpts): LevelDef {
     [0, 1],
     [0, -1],
   ];
+  // each guard gets a UNIQUE start cell — overlapping spawns hid a guard under
+  // another, so "kill them all" left one alive and the exit never unlocked.
+  const used = new Set<string>([sc[0] + ',' + sc[1]]);
+  const farFromSpawn = (c: [number, number]) =>
+    Math.abs(c[0] - sc[0]) + Math.abs(c[1] - sc[1]) > SAFE + 2;
   for (let i = 0; i < o.guards && open.length; i++) {
-    // an open cell well away from the spawn safe-zone
-    let gc = open[Math.floor(rand() * open.length)];
-    for (let tries = 0; tries < 40; tries++) {
+    let gc: [number, number] | undefined;
+    for (let tries = 0; tries < 60; tries++) {
       const c = open[Math.floor(rand() * open.length)];
-      if (Math.abs(c[0] - sc[0]) + Math.abs(c[1] - sc[1]) > SAFE + 2) {
+      if (!used.has(c[0] + ',' + c[1]) && farFromSpawn(c)) {
         gc = c;
         break;
       }
     }
+    if (!gc) gc = open.find((c) => !used.has(c[0] + ',' + c[1])); // any free cell
+    if (!gc) break; // no distinct cells left
+    used.add(gc[0] + ',' + gc[1]);
     // patrol: walk along an open corridor a few cells, then back
     const dir = step4[Math.floor(rand() * 4)];
     let px = gc[0];
