@@ -95,6 +95,11 @@ export class PigeonGame {
   // co-op: whether each agent is currently holding the exit zone (for the snapshot)
   private coHostEsc = 0;
   private coGuestEsc = 0;
+  // co-op: host-authoritative guest HP (host applies damage, broadcasts in snapshot)
+  private guestHp = 0;
+  private guestMax = 0;
+  private guestDown = false;
+  private guestHurt = 0;
 
   // scoring / progression (persisted in localStorage)
   private stageTime = 0;
@@ -585,6 +590,12 @@ export class PigeonGame {
     this.player.skillT = -100;
     this.player.braceUntil = 0;
     this.player.downed = false; // revive at each stage
+    // co-op: (re)initialise host-tracked guest HP from the teammate's character
+    const lp = this.livePeer();
+    this.guestMax = lp ? CHARS[lp.char]?.combat.hp || 4 : 0;
+    this.guestHp = this.guestMax;
+    this.guestDown = false;
+    this.guestHurt = 0;
     this.projectiles = [];
     this.player.facing = Math.PI;
     this.player.crouch = false;
@@ -1124,9 +1135,9 @@ export class PigeonGame {
     this.sfx.spotted();
     if (P.hp <= 0) {
       P.hp = 0;
-      const peer = this.livePeer();
-      if (this.net.role() !== 'solo' && peer && peer.down !== 1) {
-        // co-op: go down instead of failing; revive when the team clears the stage
+      // co-op: go down instead of failing while the guest is still up
+      const teammateUp = this.net.role() !== 'solo' && this.guestMax > 0 && !this.guestDown;
+      if (teammateUp) {
         P.downed = true;
         this.toast('쓰러졌다 — 동료가 구역을 클리어하면 부활한다');
         this.addShake(0.4);
@@ -1147,6 +1158,36 @@ export class PigeonGame {
       if (now - p.seen < 5000) return p;
     }
     return null;
+  }
+
+  /** Host-side: apply damage to the guest (host-authoritative guest HP). */
+  private hurtGuest(dmg: number): void {
+    const now = performance.now();
+    if (this.guestMax <= 0 || this.guestDown) return;
+    if (now < this.guestHurt) return;
+    this.guestHurt = now + 700;
+    this.guestHp -= Math.max(1, Math.round(dmg * DIFFS[this.diffId].atk));
+    if (this.guestHp <= 0) {
+      this.guestHp = 0;
+      if (!this.player.downed) this.guestDown = true; // teammate up → guest goes down
+      else this.fail(); // both down
+    }
+  }
+
+  /** Enemy damage at a point: hits the host player and/or the guest within radius. */
+  private hurtAt(x: number, z: number, r: number, dmg: number): boolean {
+    let hit = false;
+    const P = this.player;
+    if (!P.downed && Math.hypot(x - P.pos.x, z - P.pos.y) < r) {
+      this.hurtPlayer(dmg);
+      hit = true;
+    }
+    const gp = this.guestPos();
+    if (gp && this.guestMax > 0 && !this.guestDown && Math.hypot(x - gp.x, z - gp.z) < r) {
+      this.hurtGuest(dmg);
+      hit = true;
+    }
+    return hit;
   }
 
   /** Redraw the HP pip bar. */
@@ -1290,7 +1331,7 @@ export class PigeonGame {
           b.phase = 2;
           b.timer = 0.55;
         } else {
-          if (pdist < 7) this.hurtPlayer(2);
+          this.hurtAt(b.pos.x, b.pos.y, 7, 2);
           this.burst(b.pos.x, b.pos.y, 0xec3013, 16);
           this.addShake(0.4);
           b.phase = 0;
@@ -1301,7 +1342,7 @@ export class PigeonGame {
       b.pos.x += b.lvx * dt;
       b.pos.y += b.lvz * dt;
       this.collide(b.pos, 1.3);
-      if (pdist < 1.8) this.hurtPlayer(2);
+      this.hurtAt(b.pos.x, b.pos.y, 1.8, 2);
       if (b.timer <= 0) {
         b.phase = 0;
         b.timer = enrage ? 0.9 : 1.5;
@@ -2096,7 +2137,7 @@ export class PigeonGame {
               G.pos.x += G.lvx * dt;
               G.pos.y += G.lvz * dt;
               this.collide(G.pos, 0.55);
-              if (adist < 1.0) this.hurtPlayer(2);
+              this.hurtAt(G.pos.x, G.pos.y, 1.0, 2);
               gSpeed = 14;
               handled = true;
             } else if (G.wind > 0) {
@@ -2177,8 +2218,8 @@ export class PigeonGame {
               gSpeed = sp;
             }
             this.collide(G.pos, 0.55);
-            // contact damages the player's HP (with i-frames) instead of instant fail
-            if (Math.hypot(P.pos.x - G.pos.x, P.pos.y - G.pos.y) < 0.95) this.hurtPlayer(1);
+            // contact damages whichever agent it catches (host and/or guest)
+            this.hurtAt(G.pos.x, G.pos.y, 0.95, 1);
             const seeNow = !hidden && this.los(G.pos.x, G.pos.y, ctx, ctz) && cd < G.range * 1.5;
             if (seeNow) {
               G.loseT = 0;
@@ -2413,10 +2454,7 @@ export class PigeonGame {
           pr.mesh.position.set(pr.x, 0.7, pr.z);
           let gone = pr.life <= 0 || this.inWall(pr.x, pr.z, 0);
           if (!gone && pr.enemy) {
-            if (Math.hypot(pr.x - P.pos.x, pr.z - P.pos.y) < 0.6) {
-              this.hurtPlayer(pr.dmg);
-              gone = true;
-            }
+            if (this.hurtAt(pr.x, pr.z, 0.6, pr.dmg)) gone = true;
           } else if (!gone) {
             for (const G of this.guards) {
               if (G.down) continue;
@@ -2533,6 +2571,9 @@ export class PigeonGame {
       ready: this.filmCount === this.films.length ? 1 : 0,
       he,
       ge,
+      ghp: this.guestHp,
+      gmax: this.guestMax,
+      gdn: this.guestDown ? 1 : 0,
       cleared,
       fail,
     };
@@ -2593,6 +2634,14 @@ export class PigeonGame {
       ? 0.28 + Math.sin(t * 5) * 0.12
       : 0.08;
     this.$<HTMLElement>('.pg-alertfill').style.width = w.alert * 100 + '%';
+    // guest HP is host-authoritative — read it from the snapshot
+    if (w.gmax > 0) {
+      const P = this.player;
+      P.maxHp = w.gmax;
+      P.hp = w.ghp;
+      P.downed = w.gdn === 1;
+      this.updHp();
+    }
     if (w.fail === 1) this.fail();
     else if (w.cleared === 1) this.clearStage();
   }

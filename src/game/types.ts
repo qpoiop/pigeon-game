@@ -246,6 +246,10 @@ export interface World {
   /** Per-player escape flags for the co-op clear. */
   he: number;
   ge: number;
+  /** Host-authoritative guest HP / max / downed (guest reads these). */
+  ghp: number;
+  gmax: number;
+  gdn: number;
   cleared: number;
   /** 1 when a guard caught either agent — shared mission fail. */
   fail: number;
