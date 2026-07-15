@@ -29,9 +29,11 @@ export const TPL =
   ' </div>' +
   ' <div class="pg-abilities">' +
   '  <div class="pg-actions">' +
-  '   <button class="pg-slot pg-b-dash"><span class="n">대시</span><span class="cd"></span></button>' +
-  '   <button class="pg-slot pg-b-attack"><span class="n">공격</span></button>' +
   '   <button class="pg-slot pg-b-skill"><span class="n sk">스킬</span><span class="cd"></span></button>' +
+  '   <div class="pg-actrow">' +
+  '    <button class="pg-slot pg-b-dash"><span class="n">대시</span><span class="cd"></span></button>' +
+  '    <button class="pg-slot pg-b-attack"><span class="n">공격</span></button>' +
+  '   </div>' +
   '  </div>' +
   ' </div>' +
   ' <button class="pg-install">앱 설치 ↓</button>' +
@@ -149,7 +151,9 @@ export const CSS =
   /* touch */
   /* ability bar (Duckov-style slots with cooldown sweeps) */
   '.pg-abilities{position:absolute;bottom:16px;right:14px;display:flex;flex-direction:column;align-items:flex-end;z-index:10;pointer-events:auto}' +
-  '.pg-actions{display:flex;gap:10px;align-items:flex-end}' +
+  '.pg-actions{display:flex;flex-direction:column;gap:10px;align-items:center}' +
+  '.pg-actrow{display:flex;gap:10px}' +
+  '.pg-slot.pg-b-skill{width:100%}' +
   '.pg-slot{position:relative;overflow:hidden;width:76px;height:76px;border:2px solid #201e1d;background:rgba(243,242,242,.9);color:#201e1d;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}' +
   '.pg-slot.pg-b-skill{background:#ec3013;color:#f3f2f2}' +
   '.pg-slot.aim{background:#e0a021;color:#201e1d}' +

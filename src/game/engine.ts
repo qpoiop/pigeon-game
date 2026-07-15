@@ -45,6 +45,9 @@ import type {
 /** GuardState <-> snapshot index, shared by host serialise and guest apply. */
 const GSTATES: GuardState[] = ['patrol', 'chase', 'lured', 'search'];
 
+/** Boss spread-shot bullet angles (offset from facing); telegraph lines match. */
+const BOSS_SPREAD = [-0.6, -0.3, 0, 0.3, 0.6];
+
 type Mode = 'menu' | 'brief' | 'play' | 'fail' | 'clear';
 
 export class PigeonGame {
@@ -688,6 +691,17 @@ export class PigeonGame {
       bring.position.y = 0.06;
       bring.visible = false;
       this.fxGroup.add(bring);
+      // one thin telegraph line per spread-shot bullet
+      const bspread: THREE.Mesh[] = [];
+      for (let i = 0; i < BOSS_SPREAD.length; i++) {
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(0.4, 0.05, 1),
+          new THREE.MeshBasicMaterial({ color: 0xec3013, transparent: true, opacity: 0.4, depthWrite: false }),
+        );
+        m.visible = false;
+        this.fxGroup.add(m);
+        bspread.push(m);
+      }
       const bhp = Math.round(L.boss.hp * DIFFS[this.diffId].bhp);
       this.boss = {
         model: bm,
@@ -703,6 +717,7 @@ export class PigeonGame {
         hurtFlash: 0,
         tele: btele,
         ring: bring,
+        spreadTele: bspread,
       };
     } else {
       this.boss = null;
@@ -1604,6 +1619,7 @@ export class PigeonGame {
     if (b.hp <= 0) {
       b.tele.visible = false;
       b.ring.visible = false;
+      for (const m of b.spreadTele) m.visible = false;
       this.burst(b.pos.x, b.pos.y, 0xec3013, 24);
       this.addShake(0.6);
       this.freeze(0.15);
@@ -1644,15 +1660,31 @@ export class PigeonGame {
     } else if (b.phase === 1) {
       face();
       const fl = 0.25 + 0.4 * Math.abs(Math.sin(t * 22));
+      b.tele.visible = false;
+      b.ring.visible = false;
+      for (const m of b.spreadTele) m.visible = false;
       if (b.pattern === 2) {
         b.ring.visible = true;
         b.ring.position.set(b.pos.x, 0.06, b.pos.y);
         b.ring.scale.setScalar(10);
         (b.ring.material as THREE.MeshBasicMaterial).opacity = fl;
+      } else if (b.pattern === 0) {
+        // spread shot: one telegraph line per bullet, along its exact trajectory
+        const len = 16;
+        for (let i = 0; i < b.spreadTele.length; i++) {
+          const ang = b.facing + BOSS_SPREAD[i];
+          const m = b.spreadTele[i];
+          m.visible = true;
+          m.scale.set(1.1, 1, len);
+          m.rotation.y = ang;
+          m.position.set(b.pos.x + (Math.sin(ang) * len) / 2, 0.1, b.pos.y + (Math.cos(ang) * len) / 2);
+          (m.material as THREE.MeshBasicMaterial).opacity = fl;
+        }
       } else {
-        const len = b.pattern === 0 ? 16 : 14;
+        // charge: a single line along the dash path
+        const len = 14;
         b.tele.visible = true;
-        b.tele.scale.set(b.pattern === 0 ? 3.4 : 1.6, 1, len);
+        b.tele.scale.set(1.6, 1, len);
         b.tele.rotation.y = b.facing;
         b.tele.position.set(
           b.pos.x + (Math.sin(b.facing) * len) / 2,
@@ -1664,8 +1696,9 @@ export class PigeonGame {
       if (b.timer <= 0) {
         b.tele.visible = false;
         b.ring.visible = false;
+        for (const m of b.spreadTele) m.visible = false;
         if (b.pattern === 0) {
-          for (const off of [-0.6, -0.3, 0, 0.3, 0.6])
+          for (const off of BOSS_SPREAD)
             this.spawnProjectile(b.pos.x, b.pos.y, b.facing + off, 1, 17, true);
           this.sfx.alert();
           b.phase = 0;

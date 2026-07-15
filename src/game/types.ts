@@ -79,9 +79,11 @@ export interface Boss {
   lvx: number;
   lvz: number;
   hurtFlash: number;
-  /** Line telegraph (spread/charge) + slam danger ring. */
+  /** Line telegraph (charge) + slam danger ring. */
   tele: THREE.Mesh;
   ring: THREE.Mesh;
+  /** One telegraph line per bullet of the spread shot (matches each trajectory). */
+  spreadTele: THREE.Mesh[];
 }
 
 /** A player or enemy projectile travelling across the field. */
