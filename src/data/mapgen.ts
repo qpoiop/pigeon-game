@@ -37,15 +37,29 @@ function mulberry32(seed: number): () => number {
 }
 
 export function genLevel(o: GenOpts): LevelDef {
-  const { gw, gh, cell } = o;
+  const { cell } = o;
   const rand = mulberry32(o.seed);
+  // vary the grid a little per seed so maps don't all feel the same size (stays odd)
+  const gw = o.gw + [-2, 0, 2][Math.floor(rand() * 3)];
+  const gh = o.gh + [-2, 0, 2][Math.floor(rand() * 3)];
+  // spawn in a random corner; exit in the diagonally-opposite one (far + hidden)
+  const corners: [number, number][] = [
+    [1, 1],
+    [gw - 2, 1],
+    [1, gh - 2],
+    [gw - 2, gh - 2],
+  ];
+  const si = Math.floor(rand() * 4);
+  const sc = corners[si];
+  const ec = corners[3 - si];
+
   // grid: wall[y][x] = true (solid) until carved
   const wall: boolean[][] = Array.from({ length: gh }, () => Array(gw).fill(true));
   const inBounds = (x: number, y: number) => x > 0 && y > 0 && x < gw - 1 && y < gh - 1;
 
   // recursive-backtracker maze over odd "room" cells, knocking out the wall between
-  const stack: [number, number][] = [[1, 1]];
-  wall[1][1] = false;
+  const stack: [number, number][] = [sc];
+  wall[sc[1]][sc[0]] = false;
   const dirs: [number, number][] = [
     [0, -2],
     [0, 2],
@@ -76,15 +90,13 @@ export function genLevel(o: GenOpts): LevelDef {
     if ((x % 2 === 1) !== (y % 2 === 1)) wall[y][x] = false; // only wall-between cells
   }
 
-  // spawn safe-zone: clear a ~3-cell radius around the spawn room corner
-  const sc: [number, number] = [1, 1];
-  const SAFE = 2;
+  // spawn safe-zone: clear just a 1-cell radius around the spawn (small breathing room)
+  const SAFE = 1;
   for (let y = Math.max(1, sc[1] - SAFE); y <= Math.min(gh - 2, sc[1] + SAFE); y++)
     for (let x = Math.max(1, sc[0] - SAFE); x <= Math.min(gw - 2, sc[0] + SAFE); x++)
       wall[y][x] = false;
 
-  // exit in the far corner (force its room open)
-  const ec: [number, number] = [gw - 2, gh - 2];
+  // ensure the exit room is open
   wall[ec[1]][ec[0]] = false;
 
   const W = gw * cell;
