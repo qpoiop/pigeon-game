@@ -19,8 +19,6 @@ import type { BirdKind } from '../data/characters';
  * here to switch that species to 3D. Relative to the app base (`./`).
  */
 export const MODELS: Partial<Record<BirdKind, string>> = {
-  // pigeon: 'pigeon/pigeon.glb', // disabled: rig-less static mesh looked stiff
-  //   + undersized; awaiting a replacement model. Procedural makeBird meanwhile.
   sparrow: 'sparrow/sparrow.glb', // rigged + baked clips → Path B (skeletal)
 };
 
@@ -31,7 +29,6 @@ export const MODELS: Partial<Record<BirdKind, string>> = {
  * points it the right way. `yaw` is the fix-up if a model faces the wrong way.
  */
 const NORM: Partial<Record<BirdKind, { height: number; yaw: number }>> = {
-  pigeon: { height: 1.35, yaw: 0 },
   sparrow: { height: 1.5, yaw: 0 },
 };
 
