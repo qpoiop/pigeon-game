@@ -87,7 +87,8 @@ function normalizeModel(
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const s = height / (size.y || 1);
+  // guard against a degenerate/NaN bind-pose box (some skinned rigs report one)
+  const s = size.y > 1e-4 && Number.isFinite(size.y) ? height / size.y : 200;
   // centre on x/z, drop feet to y=0 (offsets are pre-scale, in the wrap's space)
   root.position.x -= center.x;
   root.position.z -= center.z;
@@ -228,7 +229,6 @@ export async function preloadBirdModels(): Promise<void> {
     kinds.map(async (kind) => {
       try {
         const skinned = !!SKINNED[kind];
-        if (skinned && !skeletonClone) return; // can't clone the rig → skip
         const { scene, animations } = await loadGLTF(MODELS[kind]!);
         const nz = NORM[kind];
         const root = nz ? normalizeModel(scene, nz.height, nz.yaw, skinned) : scene;
@@ -241,22 +241,25 @@ export async function preloadBirdModels(): Promise<void> {
 }
 
 /**
- * Return a fresh `Bird` from the cached model for `kind`, or null if none is
- * loaded (caller falls back to `makeBird`). The template is deep-cloned so each
- * actor animates independently.
+ * Return a `Bird` from the cached model for `kind`, or null (caller falls back
+ * to `makeBird`). For skinned models the primary consumer (the player) reuses
+ * the single loaded instance directly — cloning a rig whose mesh + skeleton are
+ * separate scene roots reliably breaks the skin binding (mesh collapses to a
+ * point → invisible). `clone` is only for secondary actors (co-op peers), which
+ * accept an imperfect clone rather than stealing the player's mesh.
  */
-export function birdModel(kind: BirdKind): Bird | null {
+export function birdModel(kind: BirdKind, clone = false): Bird | null {
   const tpl = templates.get(kind);
   if (!tpl) return null;
-  if (tpl.skinned && skeletonClone) {
-    return buildSkinnedBird(skeletonClone(tpl.root), tpl.animations);
+  if (tpl.skinned) {
+    if (clone && skeletonClone) return buildSkinnedBird(skeletonClone(tpl.root), tpl.animations);
+    return buildSkinnedBird(tpl.root, tpl.animations);
   }
   return buildBirdFromObject(tpl.root.clone(true));
 }
 
-/** A cloned, normalised model root for static display (e.g. the title hero). */
+/** A cloned model root for static display (e.g. the title hero). */
 export function heroModel(kind: BirdKind): THREE.Object3D | null {
   const tpl = templates.get(kind);
-  if (!tpl) return null;
-  return tpl.skinned && skeletonClone ? skeletonClone(tpl.root) : tpl.root.clone(true);
+  return tpl ? tpl.root.clone(true) : null;
 }

@@ -2,7 +2,15 @@ import type { CharId } from './characters';
 
 /** Roguelite augment ids. Commons apply to any agent; the rest are a single
  *  character's signature-skill upgrade. */
-export type AugId = 'shock' | 'speed' | 'skillpow' | 'skillcd' | 'poop' | 'backstab' | 'snipe';
+export type AugId =
+  | 'shock'
+  | 'speed'
+  | 'skillpow'
+  | 'skillcd'
+  | 'poop'
+  | 'backstab'
+  | 'snipe'
+  | 'dart';
 
 export interface AugDef {
   id: AugId;
@@ -28,6 +36,7 @@ export const AUGMENTS: AugDef[] = [
   { id: 'poop', name: '비둘기똥 증식', desc: '궤도 폭탄 개수 +1 (최대 3)', char: 'pigeon', max: 2, color: 0x9c7b3f, icon: '●' },
   { id: 'backstab', name: '백어택 확장', desc: '배후 대시 반경 +2', char: 'magpie', max: 3, color: 0x18a6c4, icon: '↯' },
   { id: 'snipe', name: '저격 연장', desc: '저격 사거리 +4', char: 'owl', max: 3, color: 0xe0a021, icon: '⊹' },
+  { id: 'dart', name: '제비돌격 강화', desc: '돌격 거리 +3', char: 'sparrow', max: 3, color: 0x3fae6b, icon: '↠' },
 ];
 
 const BY_ID: Record<AugId, AugDef> = Object.fromEntries(AUGMENTS.map((a) => [a.id, a])) as Record<

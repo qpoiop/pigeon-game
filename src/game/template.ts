@@ -14,7 +14,7 @@ export const TPL =
   '  </div>' +
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
   '  <div class="pg-hurt"></div>' +
-  '  <div class="pg-hp"><span class="pg-hp-ic">♥</span><div class="pg-hp-track"><div class="pg-hp-fill"></div></div><span class="pg-hp-n"></span></div>' +
+  '  <div class="pg-hp"><span class="pg-hp-ic">HP</span><div class="pg-hp-track"><div class="pg-hp-fill"></div></div><span class="pg-hp-n"></span></div>' +
   '  <div class="pg-bosshp"><span class="l">적 사령관</span><div class="pg-bosshptrack"><div class="pg-bosshpfill"></div></div></div>' +
   '  <div class="pg-peerhp"></div>' +
   '  <canvas class="pg-map" width="150" height="100"></canvas>' +
@@ -51,7 +51,8 @@ export const CSS =
   '.pg-inv{border-right:2px solid #201e1d;color:#3c3937}' +
   '.pg-inv b{color:#201e1d}' +
   '.pg-tbsp{flex:1;justify-content:center}' +
-  '.pg-brand{font:800 13px/1 inherit;letter-spacing:.18em;color:#201e1d}' +
+  '.pg-brand{font:800 13px/1 inherit;letter-spacing:.18em;color:#201e1d;display:inline-flex;align-items:center}' +
+  ".pg-brand::before{content:'';display:inline-block;width:8px;height:8px;background:#ec3013;margin-right:7px}" +
   '.pg-dot{width:8px;height:8px;background:#ec3013;display:inline-block;margin-left:5px}' +
   '.pg-tbtn{pointer-events:auto;border:0;border-left:2px solid #201e1d;background:transparent;font:700 11px/1 inherit;letter-spacing:.07em;text-transform:uppercase;padding:0 9px;color:#201e1d;cursor:pointer;text-align:left}' +
   '.pg-tbtn:hover{background:rgba(236,48,19,.08)}' +
@@ -60,14 +61,14 @@ export const CSS =
   '.pg-net.on{color:#ec3013;font-weight:700}' +
   '.pg-alertbar{position:absolute;top:28px;left:0;right:0;height:3px}' +
   '.pg-alertfill{height:100%;width:0%;background:#ec3013;transition:width .1s linear}' +
-  // player health gauge — sits top-right under the agent roster
-  '.pg-hp{position:absolute;top:74px;right:10px;display:flex;align-items:center;gap:7px;pointer-events:none;background:rgba(243,242,242,.9);border:2px solid #201e1d;border-radius:5px;padding:4px 9px 4px 7px;box-shadow:0 2px 8px rgba(0,0,0,.22)}' +
-  '.pg-hp-ic{font-size:13px;color:#ec3013;line-height:1}' +
-  '.pg-hp-track{position:relative;width:132px;height:11px;background:rgba(32,30,29,.16);border-radius:6px;overflow:hidden}' +
-  '.pg-hp-fill{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(90deg,#ec3013,#ff7a52);border-radius:6px;transition:width .18s ease-out}' +
-  '.pg-hp.low .pg-hp-fill{background:linear-gradient(90deg,#c40000,#ec3013);animation:pghppulse .7s ease-in-out infinite}' +
-  '@keyframes pghppulse{0%,100%{opacity:1}50%{opacity:.55}}' +
-  '.pg-hp-n{font:800 12px/1 inherit;color:#201e1d;min-width:30px;text-align:right;letter-spacing:.02em}' +
+  // player health gauge — compact, flat modernist bar, top-right under the roster
+  '.pg-hp{position:absolute;top:72px;right:10px;display:flex;align-items:center;gap:6px;pointer-events:none}' +
+  '.pg-hp-ic{font:700 10px/1 inherit;color:#ec3013;letter-spacing:.12em}' +
+  '.pg-hp-track{position:relative;width:104px;height:7px;background:rgba(32,30,29,.14);border:1.5px solid #201e1d;overflow:hidden}' +
+  '.pg-hp-fill{position:absolute;inset:0;width:100%;transform-origin:left center;background:#ec3013;transition:width .18s ease-out}' +
+  '.pg-hp.low .pg-hp-fill{animation:pghppulse .7s ease-in-out infinite}' +
+  '@keyframes pghppulse{0%,100%{opacity:1}50%{opacity:.5}}' +
+  '.pg-hp-n{font:800 10px/1 inherit;color:#201e1d;min-width:26px;letter-spacing:.02em}' +
   // full-screen red vignette that flashes when the player takes damage
   '.pg-hurt{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:35;box-shadow:inset 0 0 90px 20px rgba(236,48,19,.75);transition:opacity .05s linear}' +
   // acquired-augment HUD strip (bottom-left)
@@ -200,4 +201,4 @@ export const CSS =
   '@media(max-width:760px),(max-height:520px){.pg-topbar{overflow:hidden}.pg-topbar>div,.pg-tbtn{padding:8px 8px;font-size:10px;letter-spacing:.05em;gap:5px;white-space:nowrap}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.85);transform-origin:top left}}' +
   // very narrow / very short: drop non-essential topbar items and keep each on one
   // line so it never overflows. (>.pg-* prefixes outrank the base `.pg-topbar>div`.)
-  '@media(max-width:520px),(max-height:430px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px;white-space:nowrap}.pg-brand{display:none}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}';
+  '@media(max-width:520px),(max-height:430px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px;white-space:nowrap}.pg-brand{font-size:11px;letter-spacing:.08em}.pg-brand::before{width:6px;height:6px;margin-right:5px}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}';

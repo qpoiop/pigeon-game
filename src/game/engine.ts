@@ -313,7 +313,9 @@ export class PigeonGame {
     p.downed = false;
     if (old) {
       this.actorGroup.remove(old.group);
-      disposeObject(old.group);
+      // skinned models reuse one shared loaded instance — disposing it would
+      // free the geometry/skeleton the next spawn needs. Only dispose procedural.
+      if (!old.mixer) disposeObject(old.group);
     }
     this.actorGroup.add(p.group);
     const sm = new THREE.Mesh(
@@ -1326,17 +1328,18 @@ export class PigeonGame {
     this.sfx.dash();
   }
 
-  /** 참새: short blink dash that strikes guards passed through. */
+  /** 참새 제비돌격: a fast charge that strikes every guard passed through. */
   private skillBlink(): void {
     const P = this.player;
     const now = performance.now() / 1000;
+    const dist = 8 + 3 * (this.aug.dart || 0);
     const sx = P.pos.x;
     const sz = P.pos.y;
-    const tx = sx + Math.sin(P.facing) * 8;
-    const tz = sz + Math.cos(P.facing) * 8;
-    for (let i = 1; i <= 12; i++) {
-      const px = sx + (tx - sx) * (i / 12);
-      const pz = sz + (tz - sz) * (i / 12);
+    const tx = sx + Math.sin(P.facing) * dist;
+    const tz = sz + Math.cos(P.facing) * dist;
+    for (let i = 1; i <= 14; i++) {
+      const px = sx + (tx - sx) * (i / 14);
+      const pz = sz + (tz - sz) * (i / 14);
       for (const G of this.guards)
         if (!G.down && Math.hypot(G.pos.x - px, G.pos.y - pz) < 1.6)
           this.damageGuard(G, this.skillDmg());
@@ -3021,7 +3024,7 @@ export class PigeonGame {
         }
         const kind = CHARS[p.char] ? CHARS[p.char].kind : 'pigeon';
         const pg =
-          birdModel(kind) ??
+          birdModel(kind, true) ?? // peers clone (secondary consumer)
           makeBird({ body: 0xb9b6b3, head: 0x8a8683, wing: 0x6d6a67, accent: 0x8a8683 }, kind);
         const label = makeLabel(p.name || '요원');
         label.position.y = 1.9;

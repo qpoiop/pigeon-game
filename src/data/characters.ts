@@ -116,8 +116,7 @@ export const CHARS: Record<CharId, CharDef> = {
     // warm brown low-poly plumage (uses its own baked texture in 3D)
     pal: { body: 0x9c6b3f, head: 0x6f4a2a, wing: 0x4a3018, accent: 0xe0a021 },
     combat: { hp: 3, atk: 'ranged', dmg: 1, range: 9, atkCd: 0.5, projSpeed: 22 },
-    // reuses the blink mechanic (short reposition) — flavoured as a dart-in/out
-    skill: { id: 'blink', name: '박차', desc: '전방으로 순간이동해 치고 빠진다', cd: 5 },
+    skill: { id: 'blink', name: '제비돌격', desc: '전방으로 빠르게 관통 돌격, 지나친 적 타격', cd: 5, dmg: 2 },
   },
 };
 
