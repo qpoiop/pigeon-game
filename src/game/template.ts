@@ -19,6 +19,7 @@ export const TPL =
   '  <div class="pg-peerhp"></div>' +
   '  <canvas class="pg-map" width="150" height="100"></canvas>' +
   '  <div class="pg-roster"></div>' +
+  '  <div class="pg-augs"></div>' +
   '  <div class="pg-objective"></div>' +
   '  <div class="pg-toast"></div>' +
   ' </div>' +
@@ -69,6 +70,26 @@ export const CSS =
   '.pg-hp-n{font:800 12px/1 inherit;color:#201e1d;min-width:30px;text-align:right;letter-spacing:.02em}' +
   // full-screen red vignette that flashes when the player takes damage
   '.pg-hurt{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:35;box-shadow:inset 0 0 90px 20px rgba(236,48,19,.75);transition:opacity .05s linear}' +
+  // acquired-augment HUD strip (bottom-left)
+  '.pg-augs{position:absolute;left:10px;bottom:12px;display:none;flex-direction:column;gap:4px;pointer-events:none;max-width:168px;z-index:9}' +
+  '.pg-augs.show{display:flex}' +
+  '.pg-augs .ag{display:flex;align-items:center;gap:6px;background:rgba(243,242,242,.9);border-left:3px solid var(--c);padding:3px 8px;box-shadow:0 1px 4px rgba(0,0,0,.18)}' +
+  '.pg-augs .ag .ic{color:var(--c);font-size:12px;line-height:1}' +
+  '.pg-augs .ag .nm{flex:1;white-space:nowrap;font:800 10px/1 inherit;letter-spacing:.02em;color:#201e1d}' +
+  '.pg-augs .ag .pips{display:flex;gap:2px}' +
+  '.pg-augs .ag .pips i{width:5px;height:5px;border-radius:50%;background:rgba(32,30,29,.2)}' +
+  '.pg-augs .ag .pips i.on{background:var(--c)}' +
+  // stage-clear augment cards
+  '.pg-cardhd{margin:8px 0;font:800 12px/1 inherit;letter-spacing:.1em;text-transform:uppercase;color:#ec3013;text-align:center}' +
+  '.pg-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}' +
+  '.pg-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 10px;border:2px solid var(--c);border-radius:8px;background:rgba(243,242,242,.7);cursor:pointer;color:#201e1d;text-align:center;overflow:hidden;transition:transform .1s,box-shadow .1s}' +
+  ".pg-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0,var(--c),transparent 70%);opacity:.16;pointer-events:none}" +
+  '.pg-card:hover,.pg-card:active{transform:translateY(-3px);box-shadow:0 5px 16px rgba(0,0,0,.28)}' +
+  '.pg-card .ic{font-size:30px;color:var(--c);line-height:1}' +
+  '.pg-card .nm{font:800 15px/1 inherit}' +
+  '.pg-card .lv{font:800 10px/1 inherit;letter-spacing:.1em;color:var(--c);text-transform:uppercase}' +
+  '.pg-card .ds{font:500 11px/1.35 inherit;color:#3c3937}' +
+  '@media(max-width:560px){.pg-cards{grid-template-columns:1fr}}' +
   '.pg-bosshp{position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(440px,74%);display:none;text-align:center;pointer-events:none}' +
   '.pg-bosshp.show{display:block}' +
   '.pg-bosshp .l{font:800 10px/1 inherit;letter-spacing:.2em;color:#ec3013;text-transform:uppercase}' +

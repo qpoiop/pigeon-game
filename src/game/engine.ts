@@ -13,6 +13,7 @@ import { INK, BG, ACCENT, MID, PAPER } from '../data/palette';
 import { CHARS, CHAR_ORDER, type CharId } from '../data/characters';
 import { DIFFS, DIFF_ORDER, type DiffId } from '../data/difficulties';
 import { LEVELS, type LevelDef } from '../data/levels';
+import { AUGMENTS, poolFor, augDef, type AugId } from '../data/augments';
 import { Sfx } from './audio';
 import { Net } from './net';
 import { makeBird, makeBang, makeQ, makeLabel, animBird } from './birds';
@@ -85,6 +86,10 @@ export class PigeonGame {
   private swipeT = 0;
   private hurtFxUntil = 0;
   private crouchT = -100;
+  /** Acquired augment levels this run (reset at the title). */
+  private aug: Partial<Record<AugId, number>> = {};
+  /** Live 비둘기똥 orbiters circling the player. */
+  private orbiters: { mesh: THREE.Mesh; ang: number; life: number; hitT: number }[] = [];
   private aiming = false;
   private aimLine!: THREE.Mesh;
 
@@ -357,6 +362,7 @@ export class PigeonGame {
     this.clearGroup(this.levelGroup);
     this.clearGroup(this.fxGroup);
     this.ghosts = []; // fxGroup clear disposed the meshes; drop the stale refs
+    this.orbiters = []; // ditto for 비둘기똥 orbiters
     this.projectiles = [];
     this.guards = [];
     this.films = [];
@@ -1134,6 +1140,25 @@ export class PigeonGame {
       if (hit) this.freeze(0.06);
       this.sfx.ui();
     }
+    if ((this.aug.shock || 0) > 0) this.shockwave(P.pos.x, P.pos.y);
+  }
+
+  /** Shockwave augment: AoE pulse around a point that scales with its level. */
+  private shockwave(x: number, z: number): void {
+    const lv = this.aug.shock || 0;
+    const r = 2.5 + lv;
+    for (const G of this.guards) {
+      if (!G.down && Math.hypot(G.pos.x - x, G.pos.y - z) < r) this.damageGuard(G, lv);
+    }
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.5, 0.12, 8, 28),
+      new THREE.MeshBasicMaterial({ color: 0x18a6c4, transparent: true, opacity: 0.7, depthWrite: false }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.2, z);
+    ring.scale.setScalar(0.6);
+    this.fxGroup.add(ring);
+    this.ghosts.push({ m: ring, t: 0.3 });
   }
 
   /** Spawn a travelling projectile. `enemy` shots hit the player; player shots hit guards. */
@@ -1165,17 +1190,31 @@ export class PigeonGame {
     });
   }
 
-  /** Per-character active skill: brace (immunity) / blink (teleport-strike) / pierce shot. */
-  /** Skill button press: owl (ranged) holds to aim; others fire instantly. */
+  /* ---------- Augment-derived stats ---------- */
+  /** Signature-skill cooldown after the skillcd augment. */
+  private skillCd(): number {
+    const base = CHARS[this.charId].skill.cd;
+    return base * Math.max(0.4, 1 - 0.15 * (this.aug.skillcd || 0));
+  }
+  /** Signature-skill damage after the skillpow augment. */
+  private skillDmg(): number {
+    return (CHARS[this.charId].skill.dmg ?? 2) + 2 * (this.aug.skillpow || 0);
+  }
+  /** Movement-speed multiplier from the speed augment. */
+  private moveMul(): number {
+    return 1 + 0.12 * (this.aug.speed || 0);
+  }
+
+  /** Skill button press: owl (snipe) holds to aim; others fire instantly. */
   private skillPress(): void {
     if (this.mode !== 'play' || this.player.downed) return;
     const sk = CHARS[this.charId].skill;
-    if (performance.now() / 1000 - this.player.skillT < sk.cd) return; // on cooldown
-    if (sk.id === 'pierce') this.aiming = true;
+    if (performance.now() / 1000 - this.player.skillT < this.skillCd()) return; // on cooldown
+    if (sk.id === 'snipe') this.aiming = true;
     else this.skill();
   }
 
-  /** Skill button release: fire the held (owl) aim shot. */
+  /** Skill button release: fire the held (owl) snipe shot. */
   private skillRelease(): void {
     if (!this.aiming) return;
     this.aiming = false;
@@ -1186,43 +1225,172 @@ export class PigeonGame {
 
   private skill(): void {
     if (this.mode !== 'play' || this.player.downed) return;
-    const P = this.player;
-    const C = CHARS[this.charId];
     const now = performance.now() / 1000;
-    if (now - P.skillT < C.skill.cd) return;
-    P.skillT = now;
+    if (now - this.player.skillT < this.skillCd()) return;
+    this.player.skillT = now;
     this.sfx.ensure();
-    if (C.skill.id === 'brace') {
-      P.braceUntil = performance.now() + 2500;
-      this.addShake(0.12);
-      this.toast('방패 태세 — 피해 무효');
-      this.sfx.item();
-    } else if (C.skill.id === 'blink') {
-      const sx = P.pos.x;
-      const sz = P.pos.y;
-      const tx = sx + Math.sin(P.facing) * 8;
-      const tz = sz + Math.cos(P.facing) * 8;
-      for (let i = 1; i <= 12; i++) {
-        const px = sx + (tx - sx) * (i / 12);
-        const pz = sz + (tz - sz) * (i / 12);
-        for (const G of this.guards)
-          if (!G.down && Math.hypot(G.pos.x - px, G.pos.y - pz) < 1.6) this.downGuard(G);
-      }
-      this.burst(sx, sz, ACCENT, 6);
-      P.pos.set(tx, tz);
-      this.collide(P.pos, 0.5);
-      this.burst(P.pos.x, P.pos.y, ACCENT, 8);
-      this.dashT = now; // reuse dash stretch + afterimage trail
-      this.addShake(0.22);
-      this.kickZoom(1.1);
-      this.sfx.dash();
-    } else {
-      // pierce: a fast, fat projectile that downs every guard in its line
-      this.spawnProjectile(P.pos.x, P.pos.y, P.facing, C.combat.dmg + 1, 34, false, true);
-      this.addShake(0.14);
-      this.kickZoom(0.8);
-      this.sfx.dash();
+    switch (CHARS[this.charId].skill.id) {
+      case 'poop':
+        this.skillPoop();
+        break;
+      case 'backstab':
+        this.skillBackstab();
+        break;
+      case 'snipe':
+        this.skillSnipe();
+        break;
+      default:
+        this.skillBlink();
+        break;
     }
+  }
+
+  /** 비둘기: launch 1..3 orbiting bombs that strike guards they sweep past. */
+  private skillPoop(): void {
+    const count = 1 + (this.aug.poop || 0);
+    for (let i = 0; i < count; i++) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32, 10, 8),
+        new THREE.MeshLambertMaterial({ color: 0x8a6a3a }),
+      );
+      m.position.y = 0.7;
+      this.fxGroup.add(m);
+      this.orbiters.push({ mesh: m, ang: (i / count) * Math.PI * 2, life: 6, hitT: 0 });
+    }
+    this.addShake(0.12);
+    this.sfx.item();
+    this.toast('비둘기똥 전개');
+  }
+
+  /** 까치: dash behind the nearest guard in reach and strike hard. */
+  private skillBackstab(): void {
+    const P = this.player;
+    const R = 3 + 2 * (this.aug.backstab || 0);
+    let best: Guard | null = null;
+    let bd = R;
+    for (const G of this.guards) {
+      if (G.down) continue;
+      const d = Math.hypot(G.pos.x - P.pos.x, G.pos.y - P.pos.y);
+      if (d < bd) {
+        bd = d;
+        best = G;
+      }
+    }
+    this.burst(P.pos.x, P.pos.y, ACCENT, 6);
+    if (best) {
+      const dx = best.pos.x - P.pos.x;
+      const dz = best.pos.y - P.pos.y;
+      const dl = Math.hypot(dx, dz) || 1;
+      P.pos.set(best.pos.x + (dx / dl) * 1.2, best.pos.y + (dz / dl) * 1.2); // land behind
+      this.collide(P.pos, 0.5);
+      P.facing = Math.atan2(best.pos.x - P.pos.x, best.pos.y - P.pos.y);
+      this.damageGuard(best, this.skillDmg() + 3); // backstab bonus
+    } else {
+      P.pos.set(P.pos.x + Math.sin(P.facing) * 4, P.pos.y + Math.cos(P.facing) * 4);
+      this.collide(P.pos, 0.5);
+    }
+    this.burst(P.pos.x, P.pos.y, ACCENT, 8);
+    this.dashT = performance.now() / 1000; // reuse dash stretch + trail
+    this.addShake(0.24);
+    this.kickZoom(1.1);
+    this.sfx.dash();
+  }
+
+  /** 부엉이: a long hitscan snipe beam dealing heavy damage along the aim. */
+  private skillSnipe(): void {
+    const P = this.player;
+    const range = 12 + 4 * (this.aug.snipe || 0);
+    const dmg = this.skillDmg() + 4;
+    const sinf = Math.sin(P.facing);
+    const cosf = Math.cos(P.facing);
+    const reach = Math.min(range, this.wallDist(P.pos.x, P.pos.y, P.facing, range));
+    for (const G of this.guards) {
+      if (G.down) continue;
+      const rx = G.pos.x - P.pos.x;
+      const rz = G.pos.y - P.pos.y;
+      const along = rx * sinf + rz * cosf; // projection onto the beam
+      if (along < 0 || along > reach) continue;
+      if (Math.abs(rx * cosf - rz * sinf) < 1.1) this.damageGuard(G, dmg); // perpendicular dist
+    }
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.05, reach),
+      new THREE.MeshBasicMaterial({ color: 0xe0a021, transparent: true, opacity: 0.9, depthWrite: false }),
+    );
+    beam.position.set(P.pos.x + (sinf * reach) / 2, 0.5, P.pos.y + (cosf * reach) / 2);
+    beam.rotation.y = P.facing;
+    this.fxGroup.add(beam);
+    this.ghosts.push({ m: beam, t: 0.3 }); // reuse the fade-and-remove path
+    this.burst(P.pos.x + sinf * 0.9, P.pos.y + cosf * 0.9, 0xe0a021, 8);
+    this.addShake(0.24);
+    this.kickZoom(1.0);
+    this.sfx.dash();
+  }
+
+  /** 참새: short blink dash that strikes guards passed through. */
+  private skillBlink(): void {
+    const P = this.player;
+    const now = performance.now() / 1000;
+    const sx = P.pos.x;
+    const sz = P.pos.y;
+    const tx = sx + Math.sin(P.facing) * 8;
+    const tz = sz + Math.cos(P.facing) * 8;
+    for (let i = 1; i <= 12; i++) {
+      const px = sx + (tx - sx) * (i / 12);
+      const pz = sz + (tz - sz) * (i / 12);
+      for (const G of this.guards)
+        if (!G.down && Math.hypot(G.pos.x - px, G.pos.y - pz) < 1.6)
+          this.damageGuard(G, this.skillDmg());
+    }
+    this.burst(sx, sz, ACCENT, 6);
+    P.pos.set(tx, tz);
+    this.collide(P.pos, 0.5);
+    this.burst(P.pos.x, P.pos.y, ACCENT, 8);
+    this.dashT = now;
+    this.addShake(0.22);
+    this.kickZoom(1.1);
+    this.sfx.dash();
+  }
+
+  /** Roguelite augments: apply a pick, and roll a 3-card choice at stage clear. */
+  private applyAug(id: AugId): void {
+    this.aug[id] = (this.aug[id] || 0) + 1;
+    this.updAugs();
+    this.sfx.pickup();
+  }
+
+  /** Up to 3 distinct, non-maxed augments offered to the current agent. */
+  private rollAugChoices(): AugId[] {
+    const pool = poolFor(this.charId).filter((a) => (this.aug[a.id] || 0) < a.max);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, 3).map((a) => a.id);
+  }
+
+  /** HUD strip of acquired augments with level pips. */
+  private updAugs(): void {
+    const el = this.$<HTMLElement>('.pg-augs');
+    if (!el) return;
+    let h = '';
+    for (const a of AUGMENTS) {
+      const lv = this.aug[a.id] || 0;
+      if (lv <= 0) continue;
+      let pips = '';
+      for (let i = 0; i < a.max; i++) pips += '<i' + (i < lv ? ' class="on"' : '') + '></i>';
+      h +=
+        '<div class="ag" style="--c:#' +
+        a.color.toString(16).padStart(6, '0') +
+        '"><span class="ic">' +
+        a.icon +
+        '</span><span class="nm">' +
+        a.name +
+        '</span><span class="pips">' +
+        pips +
+        '</span></div>';
+    }
+    el.innerHTML = h;
+    el.classList.toggle('show', h !== '');
   }
 
   /** Take a guard down: incapacitated, laid flat, no longer a threat. */
@@ -1522,6 +1690,7 @@ export class PigeonGame {
 
   private showTitle(): void {
     this.mode = 'menu';
+    this.aug = {};
     this.paused = false;
     if (this.canInstall) this.$('.pg-install').classList.add('show');
     this.net.disconnect(); // returning to title = leave the room (frees the DO slot)
@@ -1699,8 +1868,10 @@ export class PigeonGame {
   private startStage(idx: number): void {
     this.aiming = false;
     if (this.aimLine) this.aimLine.visible = false;
+    if (idx === 0) this.aug = {}; // fresh run — clear augments
     this.$('.pg-install').classList.remove('show');
     this.buildLevel(idx);
+    this.updAugs();
     this.mode = 'brief';
     const L = LEVELS[idx];
     this.overlay(
@@ -1860,18 +2031,45 @@ export class PigeonGame {
     } catch {
       /* storage unavailable */
     }
+    const nextIdx = this.stageIdx + 1;
+    const choices = last ? [] : this.rollAugChoices();
+    let cards = '';
+    if (choices.length) {
+      cards = '<div class="pg-cardhd">증강 선택 — 하나를 고르시오</div><div class="pg-cards">';
+      for (const id of choices) {
+        const a = augDef(id);
+        const lv = (this.aug[id] || 0) + 1;
+        cards +=
+          '<button class="pg-card" data-a="' +
+          id +
+          '" style="--c:#' +
+          a.color.toString(16).padStart(6, '0') +
+          '"><span class="ic">' +
+          a.icon +
+          '</span><span class="nm">' +
+          a.name +
+          '</span><span class="lv">Lv.' +
+          lv +
+          ' / ' +
+          a.max +
+          '</span><span class="ds">' +
+          a.desc +
+          '</span></button>';
+      }
+      cards += '</div>';
+    }
     this.overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">' +
         (last ? 'All clear' : 'Stage clear') +
         ' · Rank ' +
         rank +
         '</span><h1>' +
-        (last ? '작전 완수' : '탈출 성공') +
+        (last ? '작전 완수' : '구역 정리 완료') +
         '</h1></div>' +
         '<div class="bd"><p>' +
         (last
-          ? '적 사령관을 제압했다. 모든 마이크로필름은 본부로 전달되었다. 작전 완수 — 훌륭한 비행이었다, 요원.'
-          : '필름 ' + this.level.films.length + '개 회수. 다음 구역으로 이동한다.') +
+          ? '적 사령관을 제압했다. 작전 완수 — 훌륭한 비행이었다, 요원.'
+          : '적 경비를 전원 제압했다. 증강을 하나 획득하고 다음 구역으로 이동한다.') +
         '</p>' +
         '<ul class="pg-rules">' +
         '<li><b>랭크</b><span>' +
@@ -1883,16 +2081,34 @@ export class PigeonGame {
         '<li><b>발각</b><span>' +
         this.spotted +
         '회</span></li>' +
-        '</ul></div>' +
+        '</ul>' +
+        cards +
+        '</div>' +
         '<div class="ft">' +
         (last
           ? '<button class="pg-btn pg-again">처음부터 →</button>'
-          : '<button class="pg-btn pg-next">다음 스테이지 →</button>') +
+          : choices.length
+            ? ''
+            : '<button class="pg-btn pg-next">다음 스테이지 →</button>') +
         '<button class="pg-btn ghost pg-menu">타이틀로</button></div></div>',
     );
-    if (last) this.$('.pg-again').addEventListener('click', () => this.startStage(0));
-    else this.$('.pg-next').addEventListener('click', () => this.startStage(this.stageIdx + 1));
+    if (last) {
+      this.$('.pg-again').addEventListener('click', () => this.startStage(0));
+    } else if (choices.length) {
+      this.overlayEl().querySelectorAll<HTMLElement>('.pg-card').forEach((c) => {
+        c.addEventListener('click', () => {
+          this.applyAug(c.dataset.a as AugId);
+          this.startStage(nextIdx);
+        });
+      });
+    } else {
+      this.$('.pg-next').addEventListener('click', () => this.startStage(nextIdx));
+    }
     this.$('.pg-menu').addEventListener('click', () => this.showTitle());
+  }
+
+  private overlayEl(): HTMLElement {
+    return this.$<HTMLElement>('.pg-overlay');
   }
 
   /* ---------- Sim helpers ---------- */
@@ -2060,6 +2276,35 @@ export class PigeonGame {
           this.ghosts.splice(gI, 1);
         }
       }
+      // 비둘기똥 orbiters: circle the player, striking guards they sweep past
+      if (this.orbiters.length) {
+        const OR = 1.7;
+        for (let oi = this.orbiters.length - 1; oi >= 0; oi--) {
+          const o = this.orbiters[oi];
+          o.life -= dt;
+          o.ang += dt * 3.2;
+          o.hitT -= dt;
+          const ox = P.pos.x + Math.sin(o.ang) * OR;
+          const oz = P.pos.y + Math.cos(o.ang) * OR;
+          o.mesh.position.set(ox, 0.7, oz);
+          if (o.hitT <= 0 && this.mode === 'play') {
+            for (const G of this.guards) {
+              if (G.down) continue;
+              if (Math.hypot(G.pos.x - ox, G.pos.y - oz) < 0.9) {
+                this.damageGuard(G, this.skillDmg());
+                o.hitT = 0.5;
+                break;
+              }
+            }
+          }
+          if (o.life <= 0) {
+            this.fxGroup.remove(o.mesh);
+            (o.mesh.material as THREE.Material).dispose();
+            o.mesh.geometry.dispose();
+            this.orbiters.splice(oi, 1);
+          }
+        }
+      }
       // damage vignette flash (drains after a hit)
       {
         const hv = Math.max(0, (this.hurtFxUntil - now) / 340);
@@ -2102,7 +2347,7 @@ export class PigeonGame {
           iz /= il;
         }
         const dashing = t - this.dashT < 0.32;
-        const maxSp = (P.crouch ? 2.1 : 4.4) * C.speed * (dashing ? 3.1 : 1);
+        const maxSp = (P.crouch ? 2.1 : 4.4) * C.speed * this.moveMul() * (dashing ? 3.1 : 1);
         // booster afterimages while dashing — spawn a fading silhouette each frame
         if (dashing) this.spawnGhost(P);
         P.pos.x += ix * maxSp * dt;
