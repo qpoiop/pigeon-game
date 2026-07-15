@@ -86,6 +86,8 @@ export class PigeonGame {
   private arrow!: THREE.Group;
   private swipe!: THREE.Mesh;
   private swipeT = 0;
+  private aiming = false;
+  private aimLine!: THREE.Mesh;
 
   // shared squad alarm — most recent known player location (for coordinated search)
   private alarmX = 0;
@@ -255,6 +257,14 @@ export class PigeonGame {
     this.swipe.position.y = 0.08;
     this.swipe.visible = false;
     this.fxGroup.add(this.swipe);
+
+    // owl aim line (hold-to-aim sniper skill); box along local Z, clipped at walls
+    this.aimLine = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.05, 1),
+      new THREE.MeshBasicMaterial({ color: 0xe0a021, transparent: true, opacity: 0.4, depthWrite: false }),
+    );
+    this.aimLine.visible = false;
+    this.fxGroup.add(this.aimLine);
 
     this.spawnPlayer();
     this.peersMeshes = {};
@@ -891,12 +901,13 @@ export class PigeonGame {
       if (e.code === 'Digit1') this.useDecoy();
       if (e.code === 'Digit2') this.useSmoke();
       if (e.code === 'KeyF' || e.code === 'KeyJ') this.attack();
-      if (e.code === 'KeyE' || e.code === 'KeyK') this.skill();
+      if ((e.code === 'KeyE' || e.code === 'KeyK') && !e.repeat) this.skillPress();
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
       this.moveTarget = null;
     };
     this.onKeyUp = (e: KeyboardEvent) => {
       this.keys[e.code] = false;
+      if (e.code === 'KeyE' || e.code === 'KeyK') this.skillRelease();
     };
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
@@ -960,14 +971,15 @@ export class PigeonGame {
       { passive: false },
     );
 
-    this.$('.pg-b-attack').addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.attack();
-    });
     this.$('.pg-b-skill').addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      this.skill();
+      this.skillPress();
     });
+    this.$('.pg-b-skill').addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      this.skillRelease();
+    });
+    this.$('.pg-b-skill').addEventListener('pointercancel', () => this.skillRelease());
     this.$('.pg-b-dash').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.dash();
@@ -1056,6 +1068,43 @@ export class PigeonGame {
   /* ---------- Combat ---------- */
 
   /** Player attack — melee arc (downs guards in front) or a ranged projectile. */
+  /** Auto-combat: face + strike the nearest enemy in reach (no need to tap 공격). */
+  private autoAttack(t: number): void {
+    const P = this.player;
+    if (this.mode !== 'play' || P.downed || this.aiming) return;
+    const cb = CHARS[this.charId].combat;
+    if (t - P.atkT < cb.atkCd) return;
+    let bx = 0;
+    let bz = 0;
+    let bd = 1e9;
+    let found = false;
+    for (const G of this.guards) {
+      if (G.down) continue;
+      const d = Math.hypot(G.pos.x - P.pos.x, G.pos.y - P.pos.y);
+      if (d < bd) {
+        bd = d;
+        bx = G.pos.x;
+        bz = G.pos.y;
+        found = true;
+      }
+    }
+    const bs = this.boss;
+    if (bs && bs.hp > 0) {
+      const d = Math.hypot(bs.pos.x - P.pos.x, bs.pos.y - P.pos.y) - 1.6;
+      if (d < bd) {
+        bd = d;
+        bx = bs.pos.x;
+        bz = bs.pos.y;
+        found = true;
+      }
+    }
+    const reach = cb.atk === 'ranged' ? cb.range : cb.range + 0.6;
+    if (!found || bd > reach) return;
+    if (cb.atk === 'ranged' && !this.los(P.pos.x, P.pos.y, bx, bz)) return; // don't shoot through walls
+    P.facing = Math.atan2(bx - P.pos.x, bz - P.pos.y);
+    this.attack();
+  }
+
   private attack(): void {
     if (this.mode !== 'play' || this.player.downed) return;
     const P = this.player;
@@ -1142,6 +1191,24 @@ export class PigeonGame {
   }
 
   /** Per-character active skill: brace (immunity) / blink (teleport-strike) / pierce shot. */
+  /** Skill button press: owl (ranged) holds to aim; others fire instantly. */
+  private skillPress(): void {
+    if (this.mode !== 'play' || this.player.downed) return;
+    const sk = CHARS[this.charId].skill;
+    if (performance.now() / 1000 - this.player.skillT < sk.cd) return; // on cooldown
+    if (sk.id === 'pierce') this.aiming = true;
+    else this.skill();
+  }
+
+  /** Skill button release: fire the held (owl) aim shot. */
+  private skillRelease(): void {
+    if (!this.aiming) return;
+    this.aiming = false;
+    this.aimLine.visible = false;
+    this.$('.pg-b-skill').classList.remove('aim');
+    this.skill();
+  }
+
   private skill(): void {
     if (this.mode !== 'play' || this.player.downed) return;
     const P = this.player;
@@ -1324,7 +1391,6 @@ export class PigeonGame {
         el.textContent = '';
       }
     };
-    slot('.pg-b-attack', P.atkT, C.combat.atkCd);
     slot('.pg-b-skill', P.skillT, C.skill.cd);
     slot('.pg-b-dash', this.dashT, C.dashCd);
   }
@@ -1686,6 +1752,8 @@ export class PigeonGame {
   }
 
   private startStage(idx: number): void {
+    this.aiming = false;
+    if (this.aimLine) this.aimLine.visible = false;
     this.$('.pg-install').classList.remove('show');
     this.buildLevel(idx);
     this.mode = 'brief';
@@ -2220,6 +2288,24 @@ export class PigeonGame {
           } else this.arrow.visible = false;
         }
         // guards
+        this.autoAttack(t);
+        // owl hold-to-aim: a line from the player, clipped at the first wall ahead
+        if (this.aiming) {
+          const len = this.wallDist(P.pos.x, P.pos.y, P.facing, 16);
+          this.aimLine.visible = true;
+          this.aimLine.scale.set(0.5, 1, len);
+          this.aimLine.rotation.y = P.facing;
+          this.aimLine.position.set(
+            P.pos.x + (Math.sin(P.facing) * len) / 2,
+            0.12,
+            P.pos.y + (Math.cos(P.facing) * len) / 2,
+          );
+          (this.aimLine.material as THREE.MeshBasicMaterial).opacity = 0.32 + 0.3 * Math.abs(Math.sin(t * 12));
+          this.$<HTMLElement>('.pg-b-skill').classList.add('aim');
+        } else if (this.aimLine.visible) {
+          this.aimLine.visible = false;
+          this.$<HTMLElement>('.pg-b-skill').classList.remove('aim');
+        }
         let maxDetect = 0;
         const gr = this.guardsTick(dt, t, P, gp, smokeActive);
         maxDetect = gr.alert;
@@ -2610,16 +2696,9 @@ export class PigeonGame {
         this.sfx.alert();
         alert = Math.max(alert, 1);
       } else if (aware) {
-        const wp = this.guardWaypoint(G, ax, az, dt);
-        const mx = wp.x - G.pos.x;
-        const mz = wp.z - G.pos.y;
-        const m = Math.hypot(mx, mz) || 1;
-        G.pos.x += (mx / m) * G.speed * 1.12 * dt;
-        G.pos.y += (mz / m) * G.speed * 1.12 * dt;
-        this.collide(G.pos, 0.55);
-        gSpeed = G.speed * 1.12;
+        // suspicious ('?'): stop and watch — no chase until actually alerted
         this.hideZone(G);
-        alert = Math.max(alert, 0.5);
+        alert = Math.max(alert, 0.4);
         if (tw < 1) {
           tw = 1;
           tx = G.pos.x;
