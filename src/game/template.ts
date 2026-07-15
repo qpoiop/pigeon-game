@@ -26,8 +26,7 @@ export const TPL =
   '  <div class="pg-dr-bd"></div>' +
   ' </div>' +
   ' <div class="pg-abilities">' +
-  '  <button class="pg-slot pg-b-attack"><i class="k">F</i><i class="ic">⚔</i><i class="n">공격</i><i class="cd"></i></button>' +
-  '  <button class="pg-slot pg-b-skill"><i class="k">E</i><i class="ic">✦</i><i class="n sk">스킬</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot big pg-b-skill"><i class="k">E</i><i class="ic">✦</i><i class="n sk">스킬</i><i class="cd"></i></button>' +
   '  <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="ic">»</i><i class="n">대시</i><i class="cd"></i></button>' +
   '  <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="ic">◐</i><i class="n">숨기</i></button>' +
   '  <button class="pg-slot pg-b-decoy"><i class="k">1</i><i class="ic">◆</i><i class="n">미끼</i><i class="ct"></i></button>' +
@@ -98,8 +97,11 @@ export const CSS =
   '.pg-dr-bd .brief{color:#3c3937;margin:0}' +
   /* touch */
   /* ability bar (Duckov-style slots with cooldown sweeps) */
-  '.pg-abilities{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:5px;z-index:10;pointer-events:auto}' +
+  '.pg-abilities{position:absolute;bottom:14px;right:14px;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:flex-end;gap:6px;max-width:170px;z-index:10;pointer-events:auto}' +
   '.pg-slot{position:relative;overflow:hidden;width:48px;height:48px;border:2px solid #201e1d;background:rgba(243,242,242,.82);color:#201e1d;padding:0;cursor:pointer}' +
+  '.pg-slot.big{width:58px;height:58px;border-color:#ec3013}' +
+  '.pg-slot.big .ic{font-size:22px;top:13px}' +
+  '.pg-slot.aim{background:#e0a021;color:#201e1d}' +
   '.pg-slot:active{background:#ec3013;color:#f3f2f2;border-color:#ec3013}' +
   '.pg-slot.onn{background:#201e1d;color:#f3f2f2}' +
   '.pg-slot.dim{opacity:.4}' +
