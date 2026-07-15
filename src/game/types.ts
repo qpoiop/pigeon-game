@@ -146,8 +146,14 @@ export interface Guard {
   lunge: number;
   lvx: number;
   lvz: number;
-  /** Telegraph beam mesh (shown during windup). */
+  /** Telegraph beam mesh (line zone) + radial zone mesh. */
   tele: THREE.Mesh;
+  zone: THREE.Mesh;
+  /** '?' awareness sprite (bang = '!'). */
+  qmark: THREE.Sprite;
+  /** Locked aim point for a line attack. */
+  aimX: number;
+  aimZ: number;
 }
 
 /** A short-lived debris cube thrown by pickups / dashes. */

@@ -17,8 +17,8 @@ export interface ItemSpawn {
   z: number;
 }
 
-/** patrol = detect & chase to catch; sniper = telegraphed ranged shot; charger = telegraphed lunge. */
-export type GuardType = 'patrol' | 'sniper' | 'charger';
+/** Attack-zone shape: radial = circle AoE around the guard; line = a long strike ahead. */
+export type GuardType = 'radial' | 'line';
 
 export interface GuardSpawn {
   /** Patrol waypoints as [x, z] pairs. */
@@ -102,7 +102,7 @@ export const LEVELS: LevelDef[] = [
     ],
     guards: [
       { path: [[-18, 4], [18, 4]], speed: 2.2, range: 8 },
-      { path: [[-20, -12], [-2, -12]], speed: 2.3, range: 8, type: 'charger' },
+      { path: [[-20, -12], [-2, -12]], speed: 2.3, range: 8, type: 'radial' },
       { path: [[20, -12], [5, -12], [5, -2]], speed: 2.3, range: 8 },
     ],
   },
@@ -150,9 +150,9 @@ export const LEVELS: LevelDef[] = [
       { t: 'smoke', x: 0, z: 11 },
     ],
     guards: [
-      { path: [[-30, 11], [30, 11]], speed: 2.4, range: 8.5, type: 'sniper' },
+      { path: [[-30, 11], [30, 11]], speed: 2.4, range: 8.5, type: 'line' },
       { path: [[30, 3], [-30, 3]], speed: 2.4, range: 8.5 },
-      { path: [[-30, -5], [30, -5]], speed: 2.5, range: 8.5, type: 'charger' },
+      { path: [[-30, -5], [30, -5]], speed: 2.5, range: 8.5, type: 'radial' },
       { path: [[30, -13], [-30, -13]], speed: 2.5, range: 8.5 },
     ],
   },
@@ -201,12 +201,12 @@ export const LEVELS: LevelDef[] = [
       { t: 'smoke', x: -40, z: 0 },
     ],
     guards: [
-      { path: [[-16, 11], [16, 11]], speed: 2.7, range: 9, type: 'sniper' },
-      { path: [[16, -11], [-16, -11]], speed: 2.7, range: 9, type: 'charger' },
-      { path: [[-40, 20], [-40, -20]], speed: 2.6, range: 9, type: 'sniper' },
+      { path: [[-16, 11], [16, 11]], speed: 2.7, range: 9, type: 'line' },
+      { path: [[16, -11], [-16, -11]], speed: 2.7, range: 9, type: 'radial' },
+      { path: [[-40, 20], [-40, -20]], speed: 2.6, range: 9, type: 'line' },
       { path: [[40, 20], [40, -20]], speed: 2.6, range: 9 },
       { path: [[-15, 14], [-15, -14]], speed: 2.8, range: 9 },
-      { path: [[15, 14], [15, -14]], speed: 2.8, range: 9, type: 'charger' },
+      { path: [[15, 14], [15, -14]], speed: 2.8, range: 9, type: 'radial' },
     ],
   },
   {

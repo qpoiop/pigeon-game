@@ -15,12 +15,11 @@ import { DIFFS, DIFF_ORDER, type DiffId } from '../data/difficulties';
 import { LEVELS, type LevelDef } from '../data/levels';
 import { Sfx } from './audio';
 import { Net } from './net';
-import { makeBird, makeBang, makeLabel, animBird } from './birds';
+import { makeBird, makeBang, makeQ, makeLabel, animBird } from './birds';
 import { preloadBirdModels, birdModel } from './assets';
 import { clamp, angleDelta } from './anim';
 import { NavGrid } from './ai/navgrid';
 import { findPath } from './ai/pathfind';
-import { searchPoint, flankPoint } from './ai/squad';
 import { disposeObject } from './three-utils';
 import { TPL, CSS } from './template';
 import type {
@@ -513,6 +512,20 @@ export class PigeonGame {
       );
       tele.visible = false;
       this.fxGroup.add(tele);
+      // radial attack zone (flat filled circle) + '?' awareness sprite
+      const zoneGeo = new THREE.CircleGeometry(1, 30);
+      zoneGeo.rotateX(-Math.PI / 2);
+      const zone = new THREE.Mesh(
+        zoneGeo,
+        new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0, depthWrite: false }),
+      );
+      zone.position.y = 0.05;
+      zone.visible = false;
+      this.fxGroup.add(zone);
+      const qmark = makeQ();
+      qmark.position.y = 2.6;
+      qmark.visible = false;
+      pg.group.add(qmark);
       // small overhead HP bar (billboard sprite, hidden until the guard takes a hit)
       const hpbar = new THREE.Sprite(
         new THREE.SpriteMaterial({ color: 0xec3013, depthTest: false }),
@@ -521,7 +534,7 @@ export class PigeonGame {
       hpbar.position.y = 2.35;
       hpbar.visible = false;
       pg.group.add(hpbar);
-      const gtype = gd.type ?? 'patrol';
+      const gtype = gd.type ?? 'radial';
       this.guards.push({
         model: pg,
         cone,
@@ -559,6 +572,10 @@ export class PigeonGame {
         lvx: 0,
         lvz: 0,
         tele,
+        zone,
+        qmark,
+        aimX: 0,
+        aimZ: 0,
       });
     }
 
@@ -989,14 +1006,6 @@ export class PigeonGame {
   private kickZoom(m: number): void {
     this.zoomKick = Math.min(4, Math.max(this.zoomKick, m));
   }
-  /** Bundled "you've been spotted" feedback: sound + shake + freeze + zoom. */
-  private alarm(): void {
-    this.sfx.alert();
-    this.addShake(0.34);
-    this.freeze(0.07);
-    this.kickZoom(1.8);
-  }
-
   /** Dash booster afterimage: a fading, expanding silhouette left behind. */
   private spawnGhost(P: Player): void {
     const now = performance.now();
@@ -2179,344 +2188,12 @@ export class PigeonGame {
         }
         // guards
         let maxDetect = 0;
-        const hidden = smokeActive || (P.crouch && this.inCover(P.pos.x, P.pos.y));
-        const D = DIFFS[this.diffId];
-        // squad coordination: stable slots so searchers fan out and chasers flank.
-        // nearest chaser gets slot 0 (direct pursuit); the rest cut off escape.
-        const chasers = this.guards
-          .filter((g) => g.state === 'chase')
-          .sort(
-            (a, b) =>
-              Math.hypot(a.pos.x - P.pos.x, a.pos.y - P.pos.y) -
-              Math.hypot(b.pos.x - P.pos.x, b.pos.y - P.pos.y),
-          );
-        const searchers = this.guards.filter((g) => g.state === 'search');
-        for (let gI = 0; gI < this.guards.length; gI++) {
-          const G = this.guards[gI];
-          if (G.down) continue; // incapacitated guards are inert
-          let gSpeed = 0;
-          // attacker types telegraph then strike once they've spotted the player
-          if (G.gtype !== 'patrol' && (G.state === 'chase' || G.wind > 0 || G.lunge > 0)) {
-            const adx = P.pos.x - G.pos.x;
-            const adz = P.pos.y - G.pos.y;
-            const adist = Math.hypot(adx, adz);
-            let handled = false;
-            if (G.lunge > 0) {
-              G.lunge -= dt;
-              G.pos.x += G.lvx * dt;
-              G.pos.y += G.lvz * dt;
-              this.collide(G.pos, 0.55);
-              this.hurtAt(G.pos.x, G.pos.y, 1.0, 2);
-              gSpeed = 14;
-              handled = true;
-            } else if (G.wind > 0) {
-              G.facing = Math.atan2(adx, adz);
-              G.wind -= dt;
-              const len = G.gtype === 'sniper' ? Math.min(adist, 22) : 6.5;
-              G.tele.visible = true;
-              G.tele.scale.set(G.gtype === 'sniper' ? 0.3 : 1.6, 1, len);
-              G.tele.rotation.y = G.facing;
-              G.tele.position.set(
-                G.pos.x + (Math.sin(G.facing) * len) / 2,
-                0.1,
-                G.pos.y + (Math.cos(G.facing) * len) / 2,
-              );
-              (G.tele.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.4 * Math.abs(Math.sin(t * 22));
-              if (G.wind <= 0) {
-                G.tele.visible = false;
-                if (G.gtype === 'sniper') {
-                  this.spawnProjectile(G.pos.x, G.pos.y, G.facing, 1, 15, true);
-                  this.sfx.alert();
-                } else {
-                  G.lunge = 0.32;
-                  G.lvx = Math.sin(G.facing) * 14;
-                  G.lvz = Math.cos(G.facing) * 14;
-                }
-                G.atkCd = t;
-              }
-              handled = true;
-            } else {
-              const cd = G.gtype === 'sniper' ? 2.3 : 1.9;
-              const inRange =
-                G.gtype === 'sniper'
-                  ? adist < 22 && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y)
-                  : adist < 7;
-              if (t - G.atkCd > cd && inRange) {
-                G.wind = (G.gtype === 'sniper' ? 0.8 : 0.5) * D.wind;
-                G.facing = Math.atan2(adx, adz);
-                G.bang.visible = true;
-                handled = true;
-              }
-            }
-            if (handled) {
-              G.model.group.position.set(G.pos.x, 0, G.pos.y);
-              G.model.group.rotation.y = G.facing;
-              animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false });
-              (G.cone.material as THREE.MeshBasicMaterial).opacity = 0.25;
-              G.cone.scale.setScalar(
-                Math.max(0.06, this.wallDist(G.pos.x, G.pos.y, G.facing, G.range) / G.range),
-              );
-              maxDetect = 1;
-              threatW = 2;
-              threatX = G.pos.x;
-              threatZ = G.pos.y;
-              continue;
-            }
-            // not attacking this frame → fall through to normal chase (approach)
-          }
-          if (G.state === 'chase') {
-            // chase whichever agent is nearest — host player or, on host, the guest
-            let ctx = P.pos.x;
-            let ctz = P.pos.y;
-            if (gp) {
-              const dh = Math.hypot(P.pos.x - G.pos.x, P.pos.y - G.pos.y);
-              const dgs = Math.hypot(gp.x - G.pos.x, gp.z - G.pos.y);
-              if (dgs < dh) {
-                ctx = gp.x;
-                ctz = gp.z;
-              }
-            }
-            const cd = Math.hypot(ctx - G.pos.x, ctz - G.pos.y);
-            const fg = flankPoint(ctx, ctz, this.lax, this.laz, chasers.indexOf(G), chasers.length);
-            const wp = this.guardWaypoint(G, fg.x, fg.z, dt);
-            const mdx = wp.x - G.pos.x;
-            const mdz = wp.z - G.pos.y;
-            const md = Math.hypot(mdx, mdz);
-            if (md > 0.01) {
-              const sp = G.speed * 1.65;
-              G.pos.x += (mdx / md) * sp * dt;
-              G.pos.y += (mdz / md) * sp * dt;
-              G.facing = Math.atan2(mdx, mdz);
-              gSpeed = sp;
-            }
-            this.collide(G.pos, 0.55);
-            // contact damages whichever agent it catches (host and/or guest)
-            this.hurtAt(G.pos.x, G.pos.y, 0.95, 1);
-            const seeNow = !hidden && this.los(G.pos.x, G.pos.y, ctx, ctz) && cd < G.range * 1.5;
-            if (seeNow) {
-              G.loseT = 0;
-              G.lsx = ctx;
-              G.lsz = ctz;
-            } else {
-              G.loseT += dt;
-              if (G.loseT > 2.4) {
-                G.state = 'search';
-                G.searchT = 0;
-                G.detect = 0.4;
-                G.bang.visible = false;
-                this.alarmX = G.lsx;
-                this.alarmZ = G.lsz;
-              }
-            }
-          } else if (G.state === 'search') {
-            // coordinated sweep: each searcher gets a distinct point around the alarm
-            const sp2 = searchPoint(
-              this.alarmX,
-              this.alarmZ,
-              searchers.indexOf(G),
-              searchers.length,
-              6,
-            );
-            const sdx = sp2.x - G.pos.x;
-            const sdz = sp2.z - G.pos.y;
-            const sd = Math.hypot(sdx, sdz);
-            if (sd > 1) {
-              const wp = this.guardWaypoint(G, sp2.x, sp2.z, dt);
-              const mdx = wp.x - G.pos.x;
-              const mdz = wp.z - G.pos.y;
-              const md = Math.hypot(mdx, mdz) || 1;
-              G.pos.x += (mdx / md) * G.speed * 1.2 * dt;
-              G.pos.y += (mdz / md) * G.speed * 1.2 * dt;
-              G.facing = Math.atan2(mdx, mdz);
-              gSpeed = G.speed * 1.2;
-              this.collide(G.pos, 0.55);
-            } else {
-              G.searchT += dt;
-              G.facing += dt * 1.7;
-              if (G.searchT > 3) G.state = 'patrol';
-            }
-            const vdx2 = P.pos.x - G.pos.x;
-            const vdz2 = P.pos.y - G.pos.y;
-            const vd2 = Math.hypot(vdx2, vdz2);
-            let seen2 = false;
-            if (!hidden && vd2 < G.range * (P.crouch ? 0.55 : 1) * C.detect) {
-              let ang2 = Math.atan2(vdx2, vdz2) - G.facing;
-              while (ang2 > Math.PI) ang2 -= Math.PI * 2;
-              while (ang2 < -Math.PI) ang2 += Math.PI * 2;
-              if (Math.abs(ang2) < G.fov / 2 && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y)) {
-                seen2 = true;
-                G.detect = Math.min(1, G.detect + dt / (D.dt * 0.6));
-                if (G.detect >= 1) {
-                  G.state = 'chase';
-                  G.loseT = 0;
-                  G.bang.visible = true;
-                  this.alarm();
-                  this.spotted++;
-                  this.alarmX = P.pos.x;
-                  this.alarmZ = P.pos.y;
-                }
-              }
-            }
-            if (!seen2) G.detect = Math.max(0.15, G.detect - dt / 1.2);
-          } else {
-            // lure check
-            if (G.state !== 'lured' && this.decoys.length) {
-              for (let dj = 0; dj < this.decoys.length; dj++) {
-                const dcx = this.decoys[dj];
-                if (
-                  Math.hypot(dcx.x - G.pos.x, dcx.z - G.pos.y) < 11 &&
-                  this.los(G.pos.x, G.pos.y, dcx.x, dcx.z)
-                ) {
-                  G.state = 'lured';
-                  G.lure = dcx;
-                  break;
-                }
-              }
-            }
-            if (G.state === 'lured') {
-              const lu = G.lure;
-              if (!lu || lu.t <= 0) {
-                G.state = 'patrol';
-                G.lure = null;
-              } else {
-                const ldx = lu.x - G.pos.x;
-                const ldz = lu.z - G.pos.y;
-                const ld = Math.hypot(ldx, ldz);
-                if (ld > 1.2) {
-                  const wp = this.guardWaypoint(G, lu.x, lu.z, dt);
-                  const mdx = wp.x - G.pos.x;
-                  const mdz = wp.z - G.pos.y;
-                  const md = Math.hypot(mdx, mdz) || 1;
-                  G.pos.x += (mdx / md) * G.speed * dt;
-                  G.pos.y += (mdz / md) * G.speed * dt;
-                  G.facing = Math.atan2(mdx, mdz);
-                  gSpeed = G.speed;
-                } else {
-                  G.facing = Math.atan2(ldx, ldz);
-                }
-                this.collide(G.pos, 0.55);
-              }
-            } else {
-              const tp = G.path[(G.seg + 1) % G.path.length];
-              const pd = Math.hypot(tp[0] - G.pos.x, tp[1] - G.pos.y);
-              if (pd < 0.4) {
-                G.seg = (G.seg + 1) % G.path.length;
-                G.stuckT = 0;
-              } else {
-                // route around walls (A*) toward the waypoint so patrols don't jam
-                const bx = G.pos.x;
-                const bz = G.pos.y;
-                const wp = this.guardWaypoint(G, tp[0], tp[1], dt);
-                const mdx = wp.x - G.pos.x;
-                const mdz = wp.z - G.pos.y;
-                const md = Math.hypot(mdx, mdz) || 1;
-                G.pos.x += (mdx / md) * G.speed * dt;
-                G.pos.y += (mdz / md) * G.speed * dt;
-                let dg = Math.atan2(mdx, mdz) - G.facing;
-                while (dg > Math.PI) dg -= Math.PI * 2;
-                while (dg < -Math.PI) dg += Math.PI * 2;
-                G.facing += dg * Math.min(1, dt * 6);
-                gSpeed = G.speed;
-                this.collide(G.pos, 0.55);
-                // anti-stuck: no real progress → skip to the next waypoint
-                if (Math.hypot(G.pos.x - bx, G.pos.y - bz) < G.speed * dt * 0.3) G.stuckT += dt;
-                else G.stuckT = 0;
-                if (G.stuckT > 1) {
-                  G.seg = (G.seg + 1) % G.path.length;
-                  G.navPath = null;
-                  G.stuckT = 0;
-                }
-              }
-            }
-            // detection (also while lured)
-            const vdx = P.pos.x - G.pos.x;
-            const vdz = P.pos.y - G.pos.y;
-            const vd = Math.hypot(vdx, vdz);
-            const effRange = G.range * (P.crouch ? 0.55 : 1) * C.detect;
-            let inCone = false;
-            if (!hidden && vd < effRange) {
-              let ang = Math.atan2(vdx, vdz) - G.facing;
-              while (ang > Math.PI) ang -= Math.PI * 2;
-              while (ang < -Math.PI) ang += Math.PI * 2;
-              if (Math.abs(ang) < G.fov / 2 && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y))
-                inCone = true;
-            }
-            if (inCone) {
-              if (G.detect === 0) this.sfx.spotted();
-              G.detect = Math.min(1, G.detect + dt / D.dt);
-              if (G.detect >= 1) {
-                G.state = 'chase';
-                G.loseT = 0;
-                G.bang.visible = true;
-                this.alarm();
-                this.spotted++;
-                this.alarmX = P.pos.x;
-                this.alarmZ = P.pos.y;
-                // raise the alarm: nearby patrolling guards start searching too
-                for (let gJ = 0; gJ < this.guards.length; gJ++) {
-                  const G2 = this.guards[gJ];
-                  if (
-                    G2 !== G &&
-                    G2.state === 'patrol' &&
-                    Math.hypot(G2.pos.x - G.pos.x, G2.pos.y - G.pos.y) < 16
-                  ) {
-                    G2.state = 'search';
-                    G2.lsx = P.pos.x;
-                    G2.lsz = P.pos.y;
-                    G2.searchT = 0;
-                    G2.detect = Math.max(G2.detect, 0.3);
-                  }
-                }
-              }
-            } else G.detect = Math.max(0, G.detect - dt / 1.2);
-          }
-          // co-op: a non-chasing guard can also notice the guest and flip to chase
-          if (gp && G.state !== 'chase') {
-            const ggx = gp.x - G.pos.x;
-            const ggz = gp.z - G.pos.y;
-            const ggd = Math.hypot(ggx, ggz);
-            if (!hidden && ggd < G.range * (gp.crouch ? 0.55 : 1)) {
-              let gga = Math.atan2(ggx, ggz) - G.facing;
-              while (gga > Math.PI) gga -= Math.PI * 2;
-              while (gga < -Math.PI) gga += Math.PI * 2;
-              if (Math.abs(gga) < G.fov / 2 && this.los(G.pos.x, G.pos.y, gp.x, gp.z)) {
-                G.detect = Math.min(1, G.detect + dt / D.dt);
-                if (G.detect >= 1) {
-                  G.state = 'chase';
-                  G.loseT = 0;
-                  G.bang.visible = true;
-                  this.alarm();
-                  this.spotted++;
-                  this.alarmX = gp.x;
-                  this.alarmZ = gp.z;
-                }
-              }
-            }
-          }
-          maxDetect = Math.max(maxDetect, G.state === 'chase' ? 1 : G.detect);
-          const gw = G.state === 'chase' ? 2 : G.detect;
-          if (gw > threatW) {
-            threatW = gw;
-            threatX = G.pos.x;
-            threatZ = G.pos.y;
-          }
-          (G.cone.material as THREE.MeshBasicMaterial).opacity =
-            0.08 + G.detect * 0.18 + (G.state === 'chase' ? 0.14 : 0);
-          // clip the cone at the nearest wall ahead so it doesn't show through cover
-          G.cone.scale.setScalar(
-            Math.max(0.06, this.wallDist(G.pos.x, G.pos.y, G.facing, G.range) / G.range),
-          );
-          G.model.group.position.set(G.pos.x, 0, G.pos.y);
-          G.model.group.rotation.y = G.facing;
-          // brief scale pulse when hit
-          G.hurtFlash = Math.max(0, G.hurtFlash - dt * 4);
-          G.model.group.scale.setScalar(1.12 * (1 + G.hurtFlash * 0.14));
-          // guards lock their gaze onto the player once they notice something
-          const gLook =
-            G.state === 'chase' || G.state === 'search' || G.detect > 0.2
-              ? clamp(angleDelta(Math.atan2(P.pos.x - G.pos.x, P.pos.y - G.pos.y), G.facing), -0.8, 0.8)
-              : 0;
-          animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false, lookYaw: gLook });
+        const gr = this.guardsTick(dt, t, P, gp, smokeActive);
+        maxDetect = gr.alert;
+        if (gr.tw > threatW) {
+          threatW = gr.tw;
+          threatX = gr.tx;
+          threatZ = gr.tz;
         }
         this.bossTick(dt, t);
         this.$<HTMLElement>('.pg-alertfill').style.width = maxDetect * 100 + '%';
@@ -2740,6 +2417,197 @@ export class PigeonGame {
     }
     if (w.fail === 1) this.fail();
     else if (w.cleared === 1) this.clearStage();
+  }
+
+  /* ---------- Guard AI (distance awareness → zone attack) ---------- */
+  private hideZone(G: Guard): void {
+    G.zone.visible = false;
+    G.tele.visible = false;
+  }
+
+  /** Grow + fade-in the attack-zone telegraph as the windup fills (0..1). */
+  private showZone(G: Guard, fill: number, ZR: number, ZL: number, ZW: number): void {
+    const op = 0.15 + fill * 0.4;
+    if (G.gtype === 'radial') {
+      G.tele.visible = false;
+      G.zone.visible = true;
+      G.zone.position.set(G.pos.x, 0.05, G.pos.y);
+      G.zone.scale.setScalar(ZR * (0.4 + 0.6 * fill));
+      (G.zone.material as THREE.MeshBasicMaterial).opacity = op;
+    } else {
+      G.zone.visible = false;
+      G.tele.visible = true;
+      const ang = Math.atan2(G.aimX - G.pos.x, G.aimZ - G.pos.y);
+      const len = ZL * (0.4 + 0.6 * fill);
+      G.tele.scale.set(ZW * 2, 1, len);
+      G.tele.rotation.y = ang;
+      G.tele.position.set(G.pos.x + (Math.sin(ang) * len) / 2, 0.1, G.pos.y + (Math.cos(ang) * len) / 2);
+      (G.tele.material as THREE.MeshBasicMaterial).opacity = op;
+    }
+  }
+
+  /** Damage any agent inside the guard's attack zone (radial circle or forward line). */
+  private zoneHit(G: Guard, ZR: number, ZL: number, ZW: number): void {
+    const ang = Math.atan2(G.aimX - G.pos.x, G.aimZ - G.pos.y);
+    const hit = (px: number, pz: number, guest: boolean) => {
+      let inside: boolean;
+      if (G.gtype === 'radial') {
+        inside = Math.hypot(px - G.pos.x, pz - G.pos.y) <= ZR;
+      } else {
+        const rx = px - G.pos.x;
+        const rz = pz - G.pos.y;
+        const fwd = rx * Math.sin(ang) + rz * Math.cos(ang);
+        const side = rx * Math.cos(ang) - rz * Math.sin(ang);
+        inside = fwd > 0 && fwd < ZL && Math.abs(side) < ZW;
+      }
+      if (inside && this.los(G.pos.x, G.pos.y, px, pz)) {
+        if (guest) this.hurtGuest(1);
+        else this.hurtPlayer(1);
+      }
+    };
+    if (!this.player.downed) hit(this.player.pos.x, this.player.pos.y, false);
+    const gp = this.guestPos();
+    if (gp && this.guestMax > 0 && !this.guestDown) hit(gp.x, gp.z, true);
+  }
+
+  /** One patrol step (A* routing + anti-stuck); returns the move speed. */
+  private patrolStep(G: Guard, dt: number): number {
+    const tp = G.path[(G.seg + 1) % G.path.length];
+    if (Math.hypot(tp[0] - G.pos.x, tp[1] - G.pos.y) < 0.4) {
+      G.seg = (G.seg + 1) % G.path.length;
+      G.stuckT = 0;
+      return 0;
+    }
+    const bx = G.pos.x;
+    const bz = G.pos.y;
+    const wp = this.guardWaypoint(G, tp[0], tp[1], dt);
+    const mx = wp.x - G.pos.x;
+    const mz = wp.z - G.pos.y;
+    const m = Math.hypot(mx, mz) || 1;
+    G.pos.x += (mx / m) * G.speed * dt;
+    G.pos.y += (mz / m) * G.speed * dt;
+    let dg = Math.atan2(mx, mz) - G.facing;
+    while (dg > Math.PI) dg -= Math.PI * 2;
+    while (dg < -Math.PI) dg += Math.PI * 2;
+    G.facing += dg * Math.min(1, dt * 6);
+    this.collide(G.pos, 0.55);
+    if (Math.hypot(G.pos.x - bx, G.pos.y - bz) < G.speed * dt * 0.3) G.stuckT += dt;
+    else G.stuckT = 0;
+    if (G.stuckT > 1) {
+      G.seg = (G.seg + 1) % G.path.length;
+      G.navPath = null;
+      G.stuckT = 0;
+    }
+    return G.speed;
+  }
+
+  /**
+   * New enemy model: distance-based awareness (?/!) then a telegraphed attack
+   * zone (radial or line) that fills while the guard is frozen; when it fills,
+   * anyone inside takes damage. Then a cooldown. Returns HUD alert + threat.
+   */
+  private guardsTick(
+    dt: number,
+    t: number,
+    P: Player,
+    gp: { x: number; z: number; crouch: boolean } | null,
+    smokeActive: boolean,
+  ): { alert: number; tw: number; tx: number; tz: number } {
+    let alert = 0;
+    let tw = 0;
+    let tx = 0;
+    let tz = 0;
+    const D = DIFFS[this.diffId];
+    const AWARE = 10 * D.gr;
+    const ALERT = 6 * D.gr;
+    const windDur = 1.0 * D.wind;
+    const cdDur = 2.4;
+    const ZR = 4.5;
+    const ZL = 11;
+    const ZW = 1.4;
+    for (let gI = 0; gI < this.guards.length; gI++) {
+      const G = this.guards[gI];
+      if (G.down) continue;
+      G.hurtFlash = Math.max(0, G.hurtFlash - dt * 4);
+      let ax = P.pos.x;
+      let az = P.pos.y;
+      let acrouch = P.crouch;
+      let aHidden = smokeActive || (P.crouch && this.inCover(P.pos.x, P.pos.y));
+      if (gp) {
+        const dh = Math.hypot(P.pos.x - G.pos.x, P.pos.y - G.pos.y);
+        const dgs = Math.hypot(gp.x - G.pos.x, gp.z - G.pos.y);
+        if (dgs < dh) {
+          ax = gp.x;
+          az = gp.z;
+          acrouch = gp.crouch;
+          aHidden = false;
+        }
+      }
+      const adx = ax - G.pos.x;
+      const adz = az - G.pos.y;
+      const dist = Math.hypot(adx, adz) || 0.001;
+      const seen = !aHidden && this.los(G.pos.x, G.pos.y, ax, az);
+      const cm = acrouch ? 0.6 : 1;
+      const aware = seen && dist <= AWARE * cm;
+      const inAlert = seen && dist <= ALERT * cm;
+      if (aware || G.wind > 0) {
+        let da = Math.atan2(adx, adz) - G.facing;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        G.facing += da * Math.min(1, dt * 7);
+      }
+      let gSpeed = 0;
+      if (G.wind > 0) {
+        G.wind -= dt;
+        this.showZone(G, Math.min(1, 1 - G.wind / windDur), ZR, ZL, ZW);
+        if (G.wind <= 0) {
+          this.hideZone(G);
+          this.zoneHit(G, ZR, ZL, ZW);
+          G.atkCd = t;
+          this.addShake(0.12);
+        }
+        alert = 1;
+        tw = 2;
+        tx = G.pos.x;
+        tz = G.pos.y;
+      } else if (inAlert && t - G.atkCd > cdDur) {
+        G.wind = windDur;
+        G.aimX = ax;
+        G.aimZ = az;
+        this.sfx.alert();
+        alert = Math.max(alert, 1);
+      } else if (aware) {
+        const wp = this.guardWaypoint(G, ax, az, dt);
+        const mx = wp.x - G.pos.x;
+        const mz = wp.z - G.pos.y;
+        const m = Math.hypot(mx, mz) || 1;
+        G.pos.x += (mx / m) * G.speed * 1.35 * dt;
+        G.pos.y += (mz / m) * G.speed * 1.35 * dt;
+        this.collide(G.pos, 0.55);
+        gSpeed = G.speed * 1.35;
+        this.hideZone(G);
+        alert = Math.max(alert, 0.5);
+        if (tw < 1) {
+          tw = 1;
+          tx = G.pos.x;
+          tz = G.pos.y;
+        }
+      } else {
+        gSpeed = this.patrolStep(G, dt);
+        this.hideZone(G);
+      }
+      G.bang.visible = inAlert || G.wind > 0;
+      G.qmark.visible = aware && !inAlert && G.wind <= 0;
+      G.cone.visible = false;
+      G.model.group.position.set(G.pos.x, 0, G.pos.y);
+      G.model.group.rotation.y = G.facing;
+      G.model.group.scale.setScalar(1.12 * (1 + G.hurtFlash * 0.14));
+      G.hpbar.visible = G.hp < G.maxHp;
+      G.hpbar.scale.x = 1.2 * Math.max(0, G.hp / G.maxHp);
+      const gLook = aware ? clamp(angleDelta(Math.atan2(adx, adz), G.facing), -0.8, 0.8) : 0;
+      animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false, lookYaw: gLook });
+    }
+    return { alert, tw, tx, tz };
   }
 
   /** 2D minimap: walls, covers, films, items, exit, guards (by state), peers, player. */

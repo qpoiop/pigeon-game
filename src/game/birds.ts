@@ -163,6 +163,22 @@ export function makeBang(): THREE.Sprite {
   return sp;
 }
 
+/** The amber "?" awareness sprite (guard suspicious but not yet alerted). */
+export function makeQ(): THREE.Sprite {
+  const cv = document.createElement('canvas');
+  cv.width = 64;
+  cv.height = 64;
+  const c = cv.getContext('2d')!;
+  c.fillStyle = '#e0a021';
+  c.font = '900 52px Archivo, sans-serif';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText('?', 32, 36);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true }));
+  sp.scale.set(0.62, 0.62, 1);
+  return sp;
+}
+
 /** A floating name tag for a networked peer. */
 export function makeLabel(text: string): THREE.Sprite {
   const cv = document.createElement('canvas');
