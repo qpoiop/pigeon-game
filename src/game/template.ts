@@ -91,8 +91,17 @@ export const CSS =
   // stage-clear augment cards
   '.pg-cardhd{margin:10px 0 8px;font:800 12px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:#ec3013;text-align:center}' +
   '.pg-cards{display:flex;flex-direction:column;gap:8px}' +
-  '.pg-card{display:flex;flex-direction:row;align-items:center;gap:12px;padding:11px 13px;border:2px solid #201e1d;background:#f3f2f2;cursor:pointer;color:#201e1d;text-align:left;transition:background .08s,color .08s}' +
-  '.pg-card:hover,.pg-card:active{background:#ec3013;color:#f3f2f2}' +
+  '.pg-card{position:relative;display:flex;flex-direction:row;align-items:center;gap:12px;padding:11px 13px 11px 17px;border:2px solid #201e1d;background:#f3f2f2;cursor:pointer;color:#201e1d;text-align:left;overflow:hidden;transition:background .1s,color .1s,transform .12s,box-shadow .12s;animation:pgcardglow 1.9s ease-in-out infinite}' +
+  // pulsing left accent bar marks each card as selectable
+  ".pg-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:#ec3013;animation:pgcardbar 1.9s ease-in-out infinite}" +
+  // sheen sweep on hover
+  ".pg-card::after{content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-18deg);opacity:0;pointer-events:none}" +
+  '.pg-card:hover,.pg-card:active{background:#ec3013;color:#f3f2f2;transform:translateX(5px) scale(1.02);box-shadow:0 0 22px rgba(236,48,19,.55);animation:none}' +
+  '.pg-card:hover::before,.pg-card:active::before{background:#f3f2f2;animation:none}' +
+  '.pg-card:hover::after{animation:pgcardsheen .6s ease-out}' +
+  '@keyframes pgcardglow{0%,100%{box-shadow:0 0 0 rgba(236,48,19,0)}50%{box-shadow:0 0 13px rgba(236,48,19,.4)}}' +
+  '@keyframes pgcardbar{0%,100%{opacity:.55}50%{opacity:1}}' +
+  '@keyframes pgcardsheen{0%{left:-60%;opacity:0}20%{opacity:1}100%{left:120%;opacity:0}}' +
   '.pg-card .ic{font-size:22px;color:#ec3013;width:26px;text-align:center;flex:none}' +
   '.pg-card:hover .ic,.pg-card:active .ic{color:#f3f2f2}' +
   '.pg-card .mid{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}' +
