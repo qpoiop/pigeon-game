@@ -6,10 +6,10 @@ export const TPL =
   '  <div class="pg-topbar">' +
   '   <div class="pg-stage"></div>' +
   '   <div class="pg-films"></div>' +
-  '   <div class="pg-inv"></div>' +
   '   <div class="pg-tbsp"></div>' +
   '   <button class="pg-tbtn pg-mic">MIC 꺼짐</button>' +
   '   <button class="pg-tbtn pg-missionbtn">임무 (Tab)</button>' +
+  '   <button class="pg-tbtn pg-pausebtn">정지</button>' +
   '   <div class="pg-net">오프라인</div>' +
   '  </div>' +
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
@@ -23,11 +23,13 @@ export const TPL =
   '  <div class="pg-dr-hd"><span class="k">Mission file</span><button class="pg-dr-x">닫기 ✕</button></div>' +
   '  <div class="pg-dr-bd"></div>' +
   ' </div>' +
-  ' <div class="pg-touch">' +
-  '  <div class="pg-btns">' +
-  '   <button class="pg-b pg-b-attack">공격</button><button class="pg-b pg-b-skill"><span class="pg-cd"></span><b>스킬</b></button><button class="pg-b pg-b-dash">대시</button><button class="pg-b pg-b-crouch">숨기</button>' +
-  '   <button class="pg-b pg-b-decoy">미끼</button><button class="pg-b pg-b-smoke">연막</button>' +
-  '  </div>' +
+  ' <div class="pg-abilities">' +
+  '  <button class="pg-slot pg-b-attack"><i class="k">F</i><i class="n">공격</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot pg-b-skill"><i class="k">E</i><i class="n sk">스킬</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="n">대시</i><i class="cd"></i></button>' +
+  '  <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="n">숨기</i></button>' +
+  '  <button class="pg-slot pg-b-decoy"><i class="k">1</i><i class="n">미끼</i><i class="ct"></i></button>' +
+  '  <button class="pg-slot pg-b-smoke"><i class="k">2</i><i class="n">연막</i><i class="ct"></i></button>' +
   ' </div>' +
   ' <div class="pg-overlay"></div>' +
   '</div>';
@@ -79,14 +81,17 @@ export const CSS =
   '.pg-dr-bd li .todo{color:#8a8683}' +
   '.pg-dr-bd .brief{color:#3c3937;margin:0}' +
   /* touch */
-  '.pg-touch{position:absolute;inset:0;pointer-events:none;display:none;z-index:10}' +
-  '.pg-touch.show{display:block}' +
-  '.pg-btns{position:absolute;right:16px;bottom:48px;display:grid;grid-template-columns:1fr 1fr;gap:8px;pointer-events:auto}' +
-  '.pg-b{position:relative;overflow:hidden;width:70px;height:46px;border:2px solid #201e1d;background:rgba(243,242,242,.78);font:700 12px/1 inherit;letter-spacing:.08em;text-align:left;padding-left:9px;color:#201e1d;text-transform:uppercase;display:flex;align-items:center}' +
-  '.pg-b:active{background:#ec3013;color:#f3f2f2;border-color:#ec3013}' +
-  '.pg-b.onn{background:#201e1d;color:#f3f2f2}' +
-  '.pg-cd{position:absolute;left:0;bottom:0;width:100%;height:0;background:rgba(32,30,29,.5);pointer-events:none}' +
-  '.pg-b-skill b{position:relative;font-weight:700}' +
+  /* ability bar (Duckov-style slots with cooldown sweeps) */
+  '.pg-abilities{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:10;pointer-events:auto}' +
+  '.pg-slot{position:relative;overflow:hidden;width:54px;height:54px;border:2px solid #201e1d;background:rgba(243,242,242,.82);color:#201e1d;padding:0;cursor:pointer}' +
+  '.pg-slot:active{background:#ec3013;color:#f3f2f2;border-color:#ec3013}' +
+  '.pg-slot.onn{background:#201e1d;color:#f3f2f2}' +
+  '.pg-slot.dim{opacity:.4}' +
+  '.pg-slot .k{position:absolute;top:3px;left:5px;font:700 9px/1 inherit;letter-spacing:.05em;color:#8a8683;font-style:normal}' +
+  '.pg-slot.onn .k{color:#c9c6c3}' +
+  '.pg-slot .n{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:700 11px/1 inherit;letter-spacing:.03em;font-style:normal}' +
+  '.pg-slot .cd{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;font:800 17px/1 inherit;color:#201e1d}' +
+  '.pg-slot .ct{position:absolute;top:3px;right:5px;font:800 12px/1 inherit;font-style:normal;color:#ec3013}' +
   /* overlay */
   '.pg-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(243,242,242,.94);overflow:auto;z-index:40}' +
   '.pg-overlay.show{display:flex}' +

@@ -124,6 +124,7 @@ export class PigeonGame {
   private ghosts: { m: THREE.Mesh; t: number }[] = [];
   private lastGhost = 0;
   private lastBump = 0;
+  private paused = false;
   private rosterT = 0;
   private mapT = 0;
   private lax = 0;
@@ -151,6 +152,7 @@ export class PigeonGame {
         LEVELS.length - 1,
       );
       this.best = JSON.parse(localStorage.getItem('pp_best') || '{}') || {};
+      this.sfx.muted = localStorage.getItem('pp_sound') === '0';
     } catch {
       /* first run / storage unavailable */
     }
@@ -277,7 +279,7 @@ export class PigeonGame {
     p.group.add(br);
     p.braceShell = br;
     this.player = p;
-    this.$('.pg-b-skill').textContent = C.skill.name;
+    this.$('.pg-b-skill .sk').textContent = C.skill.name;
   }
 
   private resize(): void {
@@ -560,7 +562,12 @@ export class PigeonGame {
     this.$('.pg-films').innerHTML = '필름 <b>' + this.filmCount + '</b>/' + this.level.films.length;
   }
   private updInv(): void {
-    this.$('.pg-inv').innerHTML = '미끼 <b>' + this.inv.decoy + '</b> · 연막 <b>' + this.inv.smoke + '</b>';
+    const d = this.$<HTMLElement>('.pg-b-decoy');
+    const s = this.$<HTMLElement>('.pg-b-smoke');
+    d.querySelector('.ct')!.textContent = String(this.inv.decoy);
+    s.querySelector('.ct')!.textContent = String(this.inv.smoke);
+    d.classList.toggle('dim', this.inv.decoy <= 0);
+    s.classList.toggle('dim', this.inv.smoke <= 0);
   }
   private toast(msg: string): void {
     const el = this.$('.pg-toast');
@@ -689,6 +696,7 @@ export class PigeonGame {
       this.toggleDrawer();
     });
     this.$('.pg-dr-x').addEventListener('click', () => this.toggleDrawer(false));
+    this.$('.pg-pausebtn').addEventListener('click', () => this.pause());
     (this.$('.pg-drawer') as HTMLElement).style.pointerEvents = 'auto';
     this.$('.pg-mic').addEventListener('click', async () => {
       this.sfx.ensure();
@@ -717,6 +725,15 @@ export class PigeonGame {
   /* ---------- Input ---------- */
   private setupInput(): void {
     this.onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        if (this.mode === 'play') {
+          e.preventDefault();
+          if (this.paused) this.resume();
+          else this.pause();
+        }
+        return;
+      }
+      if (this.paused) return; // swallow gameplay keys while paused
       if (e.code === 'Tab' || e.code === 'KeyM') {
         if (this.mode === 'play') {
           e.preventDefault();
@@ -783,6 +800,16 @@ export class PigeonGame {
     };
     canvas.addEventListener('pointerup', endJoy);
     canvas.addEventListener('pointercancel', endJoy);
+    // scroll to zoom the camera in/out during play
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (this.mode !== 'play') return;
+        this.camDist = Math.max(11, Math.min(24, this.camDist + Math.sign(e.deltaY)));
+        e.preventDefault();
+      },
+      { passive: false },
+    );
 
     this.$('.pg-b-attack').addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -808,9 +835,6 @@ export class PigeonGame {
       e.preventDefault();
       this.useSmoke();
     });
-    if (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) {
-      this.$('.pg-touch').classList.add('show');
-    }
   }
 
   private toggleCrouch(): void {
@@ -1037,6 +1061,27 @@ export class PigeonGame {
     this.$('.pg-hp').innerHTML = s;
   }
 
+  /** Ability-slot cooldown sweeps (attack / skill / dash), Duckov-style. */
+  private updAbilities(t: number): void {
+    const P = this.player;
+    const C = CHARS[this.charId];
+    const slot = (cls: string, last: number, cd: number) => {
+      const el = this.$<HTMLElement>(cls + ' .cd');
+      const rem = Math.max(0, cd - (t - last));
+      if (rem > 0.05) {
+        el.style.background =
+          'conic-gradient(rgba(20,18,17,.5) ' + (rem / cd) * 360 + 'deg, transparent 0)';
+        el.textContent = rem >= 0.6 ? String(Math.ceil(rem)) : '';
+      } else {
+        el.style.background = 'transparent';
+        el.textContent = '';
+      }
+    };
+    slot('.pg-b-attack', P.atkT, C.combat.atkCd);
+    slot('.pg-b-skill', P.skillT, C.skill.cd);
+    slot('.pg-b-dash', this.dashT, C.dashCd);
+  }
+
   private useDecoy(): void {
     if (this.mode !== 'play') return;
     if (this.inv.decoy <= 0) {
@@ -1190,7 +1235,8 @@ export class PigeonGame {
         '</div>' +
         '<div class="pg-lbl">브리핑</div>' +
         '<ul class="pg-rules">' +
-        '<li><b>이동</b><span>WASD / 화살표 · 바닥 클릭 · 모바일 조이스틱</span></li>' +
+        '<li><b>이동</b><span>WASD / 방향키 · 모바일: 화면 아무 곳이나 눌러 드래그</span></li>' +
+        '<li><b>일시정지 (Esc)</b><span>카메라 거리·사운드 조절 / 재시도</span></li>' +
         '<li><b>숨기 (C)</b><span>느리지만 덜 띈다. 회색 은폐 구역에선 완전 은신</span></li>' +
         '<li><b>공격 (F)</b><span>요원 성향에 따라 근접 타격 또는 원거리 사격. 경비 제압</span></li>' +
         '<li><b>스킬 (E)</b><span>' +
@@ -1328,6 +1374,73 @@ export class PigeonGame {
     );
     this.$('.pg-retry').addEventListener('click', () => this.startStage(this.stageIdx));
     this.$('.pg-menu').addEventListener('click', () => this.showTitle());
+  }
+
+  /* ---------- Pause / in-game options ---------- */
+  private pause(): void {
+    if (this.mode !== 'play' || this.paused) return;
+    this.paused = true;
+    this.sfx.stopAmb();
+    const on = !this.sfx.muted;
+    this.overlay(
+      '<div class="pg-panel"><div class="hd"><span class="k">Paused</span><h1>일시정지</h1></div>' +
+        '<div class="bd"><div class="pg-set">' +
+        '<div class="pg-field"><label>카메라 거리</label><div class="pg-range"><input class="pg-cam2" type="range" min="11" max="24" step="1" value="' +
+        this.camDist +
+        '"><span class="val">' +
+        this.camDist +
+        'm</span></div></div>' +
+        '<div class="pg-field"><label>사운드</label><div class="pg-toggle pg-sound">' +
+        '<button data-v="1"' +
+        (on ? ' class="sel"' : '') +
+        '>켜짐</button><button data-v="0"' +
+        (on ? '' : ' class="sel"') +
+        '>꺼짐</button></div></div>' +
+        '</div></div>' +
+        '<div class="ft"><button class="pg-btn pg-resume">재개 →</button><button class="pg-btn ghost pg-retry2">재시도</button><button class="pg-btn ghost pg-menu2">타이틀로</button></div></div>',
+    );
+    const cam = this.$<HTMLInputElement>('.pg-cam2');
+    cam.addEventListener('input', () => {
+      this.camDist = parseFloat(cam.value) || 16;
+      (this.$('.pg-cam2') as HTMLElement).parentElement!.querySelector('.val')!.textContent =
+        cam.value + 'm';
+    });
+    this.host.querySelectorAll('.pg-sound button').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.setSound((b as HTMLElement).dataset.v === '1');
+        this.host.querySelectorAll('.pg-sound button').forEach((x) => x.classList.remove('sel'));
+        b.classList.add('sel');
+      }),
+    );
+    this.$('.pg-resume').addEventListener('click', () => this.resume());
+    this.$('.pg-retry2').addEventListener('click', () => {
+      this.paused = false;
+      this.startStage(this.stageIdx);
+    });
+    this.$('.pg-menu2').addEventListener('click', () => {
+      this.paused = false;
+      this.showTitle();
+    });
+  }
+
+  private resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.closeOverlay();
+    if (!this.sfx.muted) {
+      this.sfx.ensure();
+      this.sfx.startAmb();
+    }
+  }
+
+  private setSound(on: boolean): void {
+    this.sfx.muted = !on;
+    try {
+      localStorage.setItem('pp_sound', on ? '1' : '0');
+    } catch {
+      /* storage unavailable */
+    }
+    if (!on) this.sfx.stopAmb();
   }
 
   private clearStage(): void {
@@ -1527,11 +1640,7 @@ export class PigeonGame {
         P.braceShell.visible = braceOn;
         if (braceOn) (P.braceShell.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.sin(t * 10) * 0.1;
       }
-      if (this.mode === 'play') {
-        const skcd = CHARS[this.charId].skill.cd;
-        const rem = Math.max(0, skcd - (t - P.skillT));
-        this.$<HTMLElement>('.pg-cd').style.height = (rem / skcd) * 100 + '%';
-      }
+      if (this.mode === 'play') this.updAbilities(t);
       for (let pI = this.parts.length - 1; pI >= 0; pI--) {
         const pp = this.parts[pI];
         pp.t -= dt;
@@ -1559,7 +1668,7 @@ export class PigeonGame {
         }
       }
       if (this.mode !== 'play' && this.arrow) this.arrow.visible = false;
-      if (this.mode === 'play') {
+      if (this.mode === 'play' && !this.paused) {
         this.stageTime += dt;
         let ix = 0;
         let iz = 0;
