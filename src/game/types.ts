@@ -141,6 +141,8 @@ export interface Guard {
   stuckT: number;
   /** Aggro timer (s): >0 = alerted (engages); decays when the player is far/unseen. */
   aggro: number;
+  /** Base model scale (varies by enemy class); hurt-flash multiplies this. */
+  baseScale: number;
   /** Attacker behaviour. */
   gtype: GuardType;
   /** Last attack time (s) for cooldown. */

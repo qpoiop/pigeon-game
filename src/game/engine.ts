@@ -555,8 +555,19 @@ export class PigeonGame {
       const pg =
         birdModel('guard') ??
         makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
-      pg.group.scale.setScalar(1.12);
+      const gscale = 1.12 * (gd.scale ?? 1);
+      pg.group.scale.setScalar(gscale);
       this.levelGroup.add(pg.group);
+      // class tint ring under the guard so enemy types read apart at a glance
+      if (gd.tint !== undefined) {
+        const tr = new THREE.Mesh(
+          new THREE.RingGeometry(0.62, 0.9, 24),
+          new THREE.MeshBasicMaterial({ color: gd.tint, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
+        );
+        tr.rotation.x = -Math.PI / 2;
+        tr.position.y = 0.06;
+        pg.group.add(tr);
+      }
       const range = gd.range * D.gr;
       const fov = Math.PI * 0.42;
       const coneGeo = new THREE.CircleGeometry(range, 26, -Math.PI / 2 - fov / 2, fov);
@@ -603,16 +614,18 @@ export class PigeonGame {
       hpbar.visible = false;
       pg.group.add(hpbar);
       const gtype = gd.type ?? 'radial';
+      const ghp = gd.hp ?? 3;
       this.guards.push({
         model: pg,
         cone,
         bang,
-        hp: 3,
-        maxHp: 3,
+        hp: ghp,
+        maxHp: ghp,
         hpbar,
         hurtFlash: 0,
         stuckT: 0,
         aggro: 0,
+        baseScale: gscale,
         path: gd.path,
         seg: 0,
         speed: gd.speed * D.gs,
@@ -2955,7 +2968,7 @@ export class PigeonGame {
       G.cone.visible = false;
       G.model.group.position.set(G.pos.x, 0, G.pos.y);
       G.model.group.rotation.y = G.facing;
-      G.model.group.scale.setScalar(1.12 * (1 + G.hurtFlash * 0.32));
+      G.model.group.scale.setScalar(G.baseScale * (1 + G.hurtFlash * 0.32));
       G.hpbar.visible = G.hp < G.maxHp;
       G.hpbar.scale.x = 1.9 * Math.max(0, G.hp / G.maxHp);
       const gLook = aware ? clamp(angleDelta(Math.atan2(adx, adz), G.facing), -0.8, 0.8) : 0;

@@ -29,6 +29,14 @@ export interface GuardSpawn {
   range: number;
   /** Combat behaviour when the player is spotted (default patrol). */
   type?: GuardType;
+  /** Enemy-class overrides (procedural maps vary these). */
+  hp?: number;
+  /** Model scale multiplier (bigger = tankier read). */
+  scale?: number;
+  /** Class tint (hex) shown as a ring under the guard. */
+  tint?: number;
+  /** Short class label (for the minimap / debugging). */
+  cls?: string;
 }
 
 /** Per-level colour theme so stages read as distinct places (hex ints). */
