@@ -12,7 +12,7 @@ export interface BirdPalette {
 }
 
 /** The visual "kind" the bird builder branches on for silhouette details. */
-export type BirdKind = 'pigeon' | 'magpie' | 'owl' | 'guard';
+export type BirdKind = 'pigeon' | 'magpie' | 'owl' | 'guard' | 'sparrow';
 
 /** Combat archetype. Melee strikes an arc in front; ranged fires a projectile. */
 export type AtkType = 'melee' | 'ranged';
@@ -102,6 +102,20 @@ export const CHARS: Record<CharId, CharDef> = {
     pal: { body: 0xcbb79a, head: 0xa2886a, wing: 0x6a5540, accent: 0xe0a021 },
     combat: { hp: 4, atk: 'ranged', dmg: 2, range: 16, atkCd: 1.0, projSpeed: 26 },
     skill: { id: 'pierce', name: '관통', desc: '일렬의 경비를 관통 제압', cd: 7 },
+  },
+  sparrow: {
+    name: '참새',
+    role: '정찰·교란형',
+    desc: '아주 빠르지만 약하다. 짧고 빠른 원거리 견제로 치고 빠진다.',
+    speed: 1.32,
+    detect: 0.8,
+    dashCd: 0.8,
+    kind: 'sparrow',
+    // warm brown low-poly plumage (uses its own baked texture in 3D)
+    pal: { body: 0x9c6b3f, head: 0x6f4a2a, wing: 0x4a3018, accent: 0xe0a021 },
+    combat: { hp: 3, atk: 'ranged', dmg: 1, range: 9, atkCd: 0.5, projSpeed: 22 },
+    // reuses the blink mechanic (short reposition) — flavoured as a dart-in/out
+    skill: { id: 'blink', name: '박차', desc: '전방으로 순간이동해 치고 빠진다', cd: 5 },
   },
 };
 

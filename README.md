@@ -214,7 +214,11 @@ React는 마운트 대상 `<div>`를 만들어 엔진을 붙이고 언마운트 
 
 ## 크레딧 (3D 에셋)
 
-- 피존 모델: This work is based on ["Pigeon"](https://sketchfab.com/3d-models/pigeon-cc14e3b4eab54e21b1e1f665b249f63f)
+- 참새(sparrow) 캐릭터: This work is based on ["Lowpoly bird animation"](https://sketchfab.com/3d-models/lowpoly-bird-animation-05b856921ecc4af1b477fb2fb8e0f8ff)
+  by [Khyoocumber](https://sketchfab.com/Khyoocumber), licensed under
+  [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). 스켈레탈 리그 + 베이크
+  애니(idle/show) 포함, Draco + WebP 압축(309KB → 70KB). `public/sparrow/license.txt` 참조.
+- 피존 모델(현재 미사용): This work is based on ["Pigeon"](https://sketchfab.com/3d-models/pigeon-cc14e3b4eab54e21b1e1f665b249f63f)
   by [kanevsky](https://sketchfab.com/kanevsky), licensed under
   [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). 웹 배포용으로
   디시메이션 + Draco 압축(149MB → 141KB). 원본은 `public/pigeon/license.txt` 참조.

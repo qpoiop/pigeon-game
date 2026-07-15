@@ -1,0 +1,11 @@
+Model Information:
+* title:	Lowpoly bird animation
+* source:	https://sketchfab.com/3d-models/lowpoly-bird-animation-05b856921ecc4af1b477fb2fb8e0f8ff
+* author:	Khyoocumber (https://sketchfab.com/Khyoocumber)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Lowpoly bird animation" (https://sketchfab.com/3d-models/lowpoly-bird-animation-05b856921ecc4af1b477fb2fb8e0f8ff) by Khyoocumber (https://sketchfab.com/Khyoocumber) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

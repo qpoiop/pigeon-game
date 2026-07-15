@@ -206,6 +206,12 @@ export function makeLabel(text: string): THREE.Sprite {
  * Purely cosmetic — no gameplay state is read or written here.
  */
 export function animBird(P: Bird, input: AnimInput): void {
+  // skeletal (Path B) model: drive its baked clip; the procedural limb pass
+  // below targets dummy nodes and would be wasted work, so bail after ticking.
+  if (P.mixer) {
+    P.mixer.update(input.dt);
+    return;
+  }
   const { speed, dt, t, crouch } = input;
   const turn = input.turn ?? 0;
   const dash = clamp(input.dash ?? 0, 0, 1);

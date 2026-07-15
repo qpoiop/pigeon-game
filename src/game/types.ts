@@ -22,6 +22,9 @@ export interface Bird {
   /** Body's authored silhouette scale, so dash squash/stretch multiplies rather than replaces it. */
   baseScaleY: number;
   baseScaleZ: number;
+  /** Path B (skeletal) models: an AnimationMixer playing a baked clip; when set,
+   *  animBird ticks it and skips the procedural limb pass. */
+  mixer?: THREE.AnimationMixer;
 }
 
 /** Per-frame inputs that drive the layered bird animation. */

@@ -21,6 +21,7 @@ import type { BirdKind } from '../data/characters';
 export const MODELS: Partial<Record<BirdKind, string>> = {
   // pigeon: 'pigeon/pigeon.glb', // disabled: rig-less static mesh looked stiff
   //   + undersized; awaiting a replacement model. Procedural makeBird meanwhile.
+  sparrow: 'sparrow/sparrow.glb', // rigged + baked clips → Path B (skeletal)
 };
 
 /**
@@ -31,6 +32,12 @@ export const MODELS: Partial<Record<BirdKind, string>> = {
  */
 const NORM: Partial<Record<BirdKind, { height: number; yaw: number }>> = {
   pigeon: { height: 1.35, yaw: 0 },
+  sparrow: { height: 1.5, yaw: 0 },
+};
+
+/** Kinds whose model is a skinned mesh with baked clips → Path B (skeletal). */
+const SKINNED: Partial<Record<BirdKind, boolean>> = {
+  sparrow: true,
 };
 
 /** Draco decoder location. For offline/self-host, copy the decoder to public/draco/. */
@@ -52,17 +59,28 @@ const REQUIRED = ['body', 'head', 'tail', 'wing_R', 'wing_L', 'foot_R', 'foot_L'
  * the game's lit material (vertex colours preserved) with recomputed normals
  * (simplification can drop them). Returns a container ready to parent/clone.
  */
-function normalizeModel(root: THREE.Object3D, height: number, yaw: number): THREE.Group {
+function normalizeModel(
+  root: THREE.Object3D,
+  height: number,
+  yaw: number,
+  skinned = false,
+): THREE.Group {
   root.updateWorldMatrix(true, true);
-  root.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    m.geometry.computeVertexNormals();
-    const hasColor = !!m.geometry.getAttribute('color');
-    m.material = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: hasColor });
-    m.castShadow = false;
-    m.receiveShadow = false;
-  });
+  // A skinned model keeps its authored normals + textured material (recomputing
+  // or swapping would break shading / lose the baked texture). Rig-less static
+  // meshes get recomputed normals (simplify drops them) + the lit vertex-colour
+  // material so they match the game's look.
+  if (!skinned) {
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry.computeVertexNormals();
+      const hasColor = !!m.geometry.getAttribute('color');
+      m.material = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: hasColor });
+      m.castShadow = false;
+      m.receiveShadow = false;
+    });
+  }
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
@@ -145,11 +163,21 @@ export function buildBirdFromObject(root: THREE.Object3D): Bird | null {
   };
 }
 
-/** Loaded model roots, keyed by kind. Cloned per spawn. */
-const templates = new Map<BirdKind, THREE.Object3D>();
+/** A cached, normalised template + its baked clips; cloned per spawn. */
+interface Template {
+  root: THREE.Object3D;
+  animations: THREE.AnimationClip[];
+  skinned: boolean;
+}
+const templates = new Map<BirdKind, Template>();
 
-/** Dynamically load a .glb (with Draco) and return its scene root. */
-async function loadGLTF(url: string): Promise<THREE.Object3D> {
+/** Skeleton-aware clone (loaded lazily alongside the model loaders). */
+let skeletonClone: ((o: THREE.Object3D) => THREE.Object3D) | null = null;
+
+/** Dynamically load a .glb (with Draco); returns its scene + baked clips. */
+async function loadGLTF(
+  url: string,
+): Promise<{ scene: THREE.Object3D; animations: THREE.AnimationClip[] }> {
   const [{ GLTFLoader }, { DRACOLoader }] = await Promise.all([
     import('three/examples/jsm/loaders/GLTFLoader.js'),
     import('three/examples/jsm/loaders/DRACOLoader.js'),
@@ -159,7 +187,22 @@ async function loadGLTF(url: string): Promise<THREE.Object3D> {
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
   const gltf = await loader.loadAsync(url);
-  return gltf.scene;
+  return { scene: gltf.scene, animations: gltf.animations };
+}
+
+/**
+ * Wrap a skinned, animated model as a `Bird` with an AnimationMixer looping a
+ * baked idle clip. Limb fields are dummies — animBird ticks the mixer and skips
+ * the procedural pass; the actor moves/turns via the group while the skeleton
+ * plays.
+ */
+function buildSkinnedBird(model: THREE.Object3D, clips: THREE.AnimationClip[]): Bird {
+  const bird = buildStaticBird(model);
+  const mixer = new THREE.AnimationMixer(model);
+  const idle = clips.find((c) => /ready|idle|loop/i.test(c.name)) ?? clips[0];
+  if (idle) mixer.clipAction(idle).reset().play();
+  bird.mixer = mixer;
+  return bird;
 }
 
 /**
@@ -168,13 +211,25 @@ async function loadGLTF(url: string): Promise<THREE.Object3D> {
  * are swallowed so a missing/broken asset never breaks the game.
  */
 export async function preloadBirdModels(): Promise<void> {
+  const kinds = Object.keys(MODELS) as BirdKind[];
+  // skinned kinds need SkeletonUtils to clone the rig correctly per spawn
+  if (kinds.some((k) => SKINNED[k]) && !skeletonClone) {
+    try {
+      const m = await import('three/examples/jsm/utils/SkeletonUtils.js');
+      skeletonClone = m.clone as (o: THREE.Object3D) => THREE.Object3D;
+    } catch {
+      /* skinned kinds fall back to procedural below */
+    }
+  }
   await Promise.all(
-    (Object.keys(MODELS) as BirdKind[]).map(async (kind) => {
+    kinds.map(async (kind) => {
       try {
-        let root = await loadGLTF(MODELS[kind]!);
+        const skinned = !!SKINNED[kind];
+        if (skinned && !skeletonClone) return; // can't clone the rig → skip
+        const { scene, animations } = await loadGLTF(MODELS[kind]!);
         const nz = NORM[kind];
-        if (nz) root = normalizeModel(root, nz.height, nz.yaw);
-        if (buildBirdFromObject(root)) templates.set(kind, root);
+        const root = nz ? normalizeModel(scene, nz.height, nz.yaw, skinned) : scene;
+        templates.set(kind, { root, animations, skinned });
       } catch {
         /* leave uncached → procedural fallback */
       }
@@ -190,11 +245,15 @@ export async function preloadBirdModels(): Promise<void> {
 export function birdModel(kind: BirdKind): Bird | null {
   const tpl = templates.get(kind);
   if (!tpl) return null;
-  return buildBirdFromObject(tpl.clone(true));
+  if (tpl.skinned && skeletonClone) {
+    return buildSkinnedBird(skeletonClone(tpl.root), tpl.animations);
+  }
+  return buildBirdFromObject(tpl.root.clone(true));
 }
 
 /** A cloned, normalised model root for static display (e.g. the title hero). */
 export function heroModel(kind: BirdKind): THREE.Object3D | null {
   const tpl = templates.get(kind);
-  return tpl ? tpl.clone(true) : null;
+  if (!tpl) return null;
+  return tpl.skinned && skeletonClone ? skeletonClone(tpl.root) : tpl.root.clone(true);
 }
