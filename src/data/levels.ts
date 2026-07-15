@@ -46,6 +46,8 @@ export interface LevelDef {
   d: number;
   /** Optional colour theme; engine falls back to the default paper/ink look. */
   theme?: LevelTheme;
+  /** Boss arena: defeat the boss to clear (no film objective). */
+  boss?: { hp: number; x: number; z: number };
   /** Mission briefing text (Korean). */
   brief: string;
   /** Player spawn [x, z]. */
@@ -206,5 +208,30 @@ export const LEVELS: LevelDef[] = [
       { path: [[-15, 14], [-15, -14]], speed: 2.8, range: 9 },
       { path: [[15, 14], [15, -14]], speed: 2.8, range: 9, type: 'charger' },
     ],
+  },
+  {
+    // final boss arena — single map, defeat the commander (3 attack patterns)
+    name: '04 — 최종: 사령관',
+    theme: { ground: 0x2a2422, outer: 0x1c1917, grid: 0x39322e, wall: 0x120f0e },
+    w: 64,
+    d: 48,
+    brief:
+      '적 사령관과의 결전. 스프레드 사격 · 돌진 · 슬램 3가지 패턴 — 텔레그래프(위험 표시)를 읽고 회피하며 제압하라.',
+    spawn: [0, 20],
+    extract: [0, 20, 5, 4],
+    boss: { hp: 30, x: 0, z: -10 },
+    walls: [
+      { x: -16, z: 4, w: 4, d: 4 },
+      { x: 16, z: 4, w: 4, d: 4 },
+      { x: -16, z: -14, w: 4, d: 4 },
+      { x: 16, z: -14, w: 4, d: 4 },
+    ],
+    covers: [{ x: 0, z: 10, w: 5, d: 3 }],
+    films: [],
+    items: [
+      { t: 'smoke', x: -24, z: 18 },
+      { t: 'smoke', x: 24, z: 18 },
+    ],
+    guards: [],
   },
 ];

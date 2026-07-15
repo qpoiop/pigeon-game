@@ -37,6 +37,7 @@ import type {
   Player,
   PeerMesh,
   Projectile,
+  Boss,
   World,
 } from './types';
 
@@ -70,6 +71,7 @@ export class PigeonGame {
   private level!: LevelDef;
   private stageIdx = 0;
   private guards: Guard[] = [];
+  private boss: Boss | null = null;
   private films: Film[] = [];
   private items: Item[] = [];
   private decoys: Decoy[] = [];
@@ -527,6 +529,52 @@ export class PigeonGame {
       });
     }
 
+    // boss (final stage): a large commander with 3 telegraphed attack patterns
+    if (L.boss) {
+      const bm =
+        birdModel('guard') ??
+        makeBird({ body: 0x1a1614, head: 0x120f0e, wing: 0x0e0c0b, accent: 0xec3013 }, 'guard');
+      bm.group.scale.setScalar(2.6);
+      this.levelGroup.add(bm.group);
+      const btele = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.05, 1),
+        new THREE.MeshBasicMaterial({ color: 0xec3013, transparent: true, opacity: 0.4, depthWrite: false }),
+      );
+      btele.visible = false;
+      this.fxGroup.add(btele);
+      const bring = new THREE.Mesh(
+        new THREE.RingGeometry(0.86, 1, 40),
+        new THREE.MeshBasicMaterial({
+          color: 0xec3013,
+          transparent: true,
+          opacity: 0.35,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      bring.rotation.x = -Math.PI / 2;
+      bring.position.y = 0.06;
+      bring.visible = false;
+      this.fxGroup.add(bring);
+      this.boss = {
+        model: bm,
+        pos: new THREE.Vector2(L.boss.x, L.boss.z),
+        facing: Math.PI,
+        hp: L.boss.hp,
+        maxHp: L.boss.hp,
+        phase: 0,
+        pattern: 2,
+        timer: 1.6,
+        lvx: 0,
+        lvz: 0,
+        hurtFlash: 0,
+        tele: btele,
+        ring: bring,
+      };
+    } else {
+      this.boss = null;
+    }
+
     // reset player
     this.player.pos.set(L.spawn[0], L.spawn[1]);
     this.player.hp = this.player.maxHp;
@@ -553,7 +601,10 @@ export class PigeonGame {
     this.updFilms();
     this.updInv();
     this.updHp();
-    this.$('.pg-objective').textContent = '목표 — 마이크로필름 회수 후 적색 구역으로 탈출';
+    this.updBossHp();
+    this.$('.pg-objective').textContent = this.boss
+      ? '목표 — 적 사령관 제압'
+      : '목표 — 마이크로필름 회수 후 적색 구역으로 탈출';
     this.updDrawer();
   }
 
@@ -941,6 +992,21 @@ export class PigeonGame {
           hit = true;
         }
       }
+      // melee can also strike the boss (larger reach for its size)
+      const bs = this.boss;
+      if (bs && bs.hp > 0) {
+        const dx = bs.pos.x - P.pos.x;
+        const dz = bs.pos.y - P.pos.y;
+        if (Math.hypot(dx, dz) < cb.range + 1.6) {
+          let a = Math.atan2(dx, dz) - P.facing;
+          while (a > Math.PI) a -= Math.PI * 2;
+          while (a < -Math.PI) a += Math.PI * 2;
+          if (Math.abs(a) < 1.2) {
+            this.damageBoss(cb.dmg);
+            hit = true;
+          }
+        }
+      }
       // strike puff in front of the player
       this.burst(P.pos.x + Math.sin(P.facing) * cb.range * 0.6, P.pos.y + Math.cos(P.facing) * cb.range * 0.6, ACCENT, 6);
       this.addShake(hit ? 0.2 : 0.09);
@@ -1080,6 +1146,123 @@ export class PigeonGame {
     slot('.pg-b-attack', P.atkT, C.combat.atkCd);
     slot('.pg-b-skill', P.skillT, C.skill.cd);
     slot('.pg-b-dash', this.dashT, C.dashCd);
+  }
+
+  /* ---------- Boss ---------- */
+  private updBossHp(): void {
+    const b = this.boss;
+    const el = this.$<HTMLElement>('.pg-bosshp');
+    if (!b || b.hp <= 0) {
+      el.classList.remove('show');
+      return;
+    }
+    el.classList.add('show');
+    this.$<HTMLElement>('.pg-bosshpfill').style.width = Math.max(0, (b.hp / b.maxHp) * 100) + '%';
+  }
+
+  private damageBoss(dmg: number): void {
+    const b = this.boss;
+    if (!b || b.hp <= 0) return;
+    b.hp -= dmg;
+    b.hurtFlash = 1;
+    this.burst(b.pos.x, b.pos.y, 0xec3013, 6);
+    this.sfx.spotted();
+    this.updBossHp();
+    if (b.hp <= 0) {
+      b.tele.visible = false;
+      b.ring.visible = false;
+      this.burst(b.pos.x, b.pos.y, 0xec3013, 24);
+      this.addShake(0.6);
+      this.freeze(0.15);
+      this.clearStage();
+    }
+  }
+
+  /** Boss AI: cycle through spread-shot / charge / slam, each telegraphed. */
+  private bossTick(dt: number, t: number): void {
+    const b = this.boss;
+    if (!b || b.hp <= 0) return;
+    const P = this.player;
+    const pdx = P.pos.x - b.pos.x;
+    const pdz = P.pos.y - b.pos.y;
+    const pdist = Math.hypot(pdx, pdz) || 0.001;
+    const enrage = b.hp < b.maxHp * 0.4;
+    const face = () => {
+      let da = Math.atan2(pdx, pdz) - b.facing;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      b.facing += da * Math.min(1, dt * (b.phase === 1 ? 4 : 3));
+    };
+    b.timer -= dt;
+    b.hurtFlash = Math.max(0, b.hurtFlash - dt * 3);
+    if (b.phase === 0) {
+      face();
+      if (pdist > 9) {
+        b.pos.x += Math.sin(b.facing) * 3 * dt;
+        b.pos.y += Math.cos(b.facing) * 3 * dt;
+        this.collide(b.pos, 1.3);
+      }
+      if (b.timer <= 0) {
+        b.pattern = (b.pattern + 1) % 3;
+        b.phase = 1;
+        b.timer = (b.pattern === 0 ? 0.9 : b.pattern === 1 ? 0.7 : 1.0) * (enrage ? 0.7 : 1);
+      }
+    } else if (b.phase === 1) {
+      face();
+      const fl = 0.25 + 0.4 * Math.abs(Math.sin(t * 22));
+      if (b.pattern === 2) {
+        b.ring.visible = true;
+        b.ring.position.set(b.pos.x, 0.06, b.pos.y);
+        b.ring.scale.setScalar(7);
+        (b.ring.material as THREE.MeshBasicMaterial).opacity = fl;
+      } else {
+        const len = b.pattern === 0 ? 16 : 14;
+        b.tele.visible = true;
+        b.tele.scale.set(b.pattern === 0 ? 3.4 : 1.6, 1, len);
+        b.tele.rotation.y = b.facing;
+        b.tele.position.set(
+          b.pos.x + (Math.sin(b.facing) * len) / 2,
+          0.1,
+          b.pos.y + (Math.cos(b.facing) * len) / 2,
+        );
+        (b.tele.material as THREE.MeshBasicMaterial).opacity = fl;
+      }
+      if (b.timer <= 0) {
+        b.tele.visible = false;
+        b.ring.visible = false;
+        if (b.pattern === 0) {
+          for (const off of [-0.32, 0, 0.32])
+            this.spawnProjectile(b.pos.x, b.pos.y, b.facing + off, 1, 15, true);
+          this.sfx.alert();
+          b.phase = 0;
+          b.timer = enrage ? 0.9 : 1.5;
+        } else if (b.pattern === 1) {
+          b.lvx = Math.sin(b.facing) * 18;
+          b.lvz = Math.cos(b.facing) * 18;
+          b.phase = 2;
+          b.timer = 0.55;
+        } else {
+          if (pdist < 7) this.hurtPlayer(2);
+          this.burst(b.pos.x, b.pos.y, 0xec3013, 16);
+          this.addShake(0.4);
+          b.phase = 0;
+          b.timer = enrage ? 0.9 : 1.5;
+        }
+      }
+    } else {
+      b.pos.x += b.lvx * dt;
+      b.pos.y += b.lvz * dt;
+      this.collide(b.pos, 1.3);
+      if (pdist < 1.8) this.hurtPlayer(2);
+      if (b.timer <= 0) {
+        b.phase = 0;
+        b.timer = enrage ? 0.9 : 1.5;
+      }
+    }
+    b.model.group.position.set(b.pos.x, 0, b.pos.y);
+    b.model.group.rotation.y = b.facing;
+    b.model.group.scale.setScalar(2.6 * (1 + b.hurtFlash * 0.06));
+    animBird(b.model, { speed: b.phase === 2 ? 18 : 2, dt, t, crouch: false });
   }
 
   private useDecoy(): void {
@@ -1488,7 +1671,7 @@ export class PigeonGame {
         '</h1></div>' +
         '<div class="bd"><p>' +
         (last
-          ? '모든 마이크로필름이 본부로 전달되었다. 훌륭한 비행이었다, 요원.'
+          ? '적 사령관을 제압했다. 모든 마이크로필름은 본부로 전달되었다. 작전 완수 — 훌륭한 비행이었다, 요원.'
           : '필름 ' + this.level.films.length + '개 회수. 다음 구역으로 이동한다.') +
         '</p>' +
         '<ul class="pg-rules">' +
@@ -1774,8 +1957,9 @@ export class PigeonGame {
           }
         }
         // extraction — co-op: both agents must hold the exit zone together
+        // (skipped on boss stages, where the win condition is defeating the boss)
         const ex = this.level.extract;
-        const ready = this.filmCount === this.films.length;
+        const ready = !this.boss && this.filmCount === this.films.length;
         (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = ready
           ? 0.28 + Math.sin(t * 5) * 0.12
           : 0.08;
@@ -1783,7 +1967,9 @@ export class PigeonGame {
           Math.abs(ax - ex[0]) < ex[2] / 2 && Math.abs(az - ex[1]) < ex[3] / 2;
         this.coHostEsc = ready && inExit(P.pos.x, P.pos.y) ? 1 : 0;
         this.coGuestEsc = ready && gp && inExit(gp.x, gp.z) ? 1 : 0;
-        if (this.coHostEsc === 1 && (!gp || this.coGuestEsc === 1)) {
+        if (this.boss) {
+          /* boss stage: objective handled by boss HP, no extraction */
+        } else if (this.coHostEsc === 1 && (!gp || this.coGuestEsc === 1)) {
           this.extractT += dt;
           const pct = Math.min(100, Math.round((this.extractT / 1.2) * 100));
           this.$('.pg-objective').textContent = (gp ? '동반 탈출 중… ' : '탈출 중… ') + pct + '%';
@@ -2137,6 +2323,7 @@ export class PigeonGame {
               : 0;
           animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false, lookYaw: gLook });
         }
+        this.bossTick(dt, t);
         this.$<HTMLElement>('.pg-alertfill').style.width = maxDetect * 100 + '%';
         if (threatW > 0.25) {
           pLook = clamp(
@@ -2178,6 +2365,12 @@ export class PigeonGame {
                   gone = true;
                   break;
                 }
+              }
+            }
+            if (!gone && this.boss && this.boss.hp > 0) {
+              if (Math.hypot(pr.x - this.boss.pos.x, pr.z - this.boss.pos.y) < 2.2) {
+                this.damageBoss(pr.dmg);
+                if (!pr.pierce) gone = true;
               }
             }
           }

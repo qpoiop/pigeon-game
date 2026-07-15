@@ -59,6 +59,26 @@ export interface Player extends Bird {
   braceUntil: number;
 }
 
+/** Final-stage boss: HP + a small pattern state machine. */
+export interface Boss {
+  model: Bird;
+  pos: THREE.Vector2;
+  facing: number;
+  hp: number;
+  maxHp: number;
+  /** 0 = idle/approach, 1 = windup (telegraph), 2 = charging. */
+  phase: number;
+  /** 0 = spread shot, 1 = charge, 2 = slam. */
+  pattern: number;
+  timer: number;
+  lvx: number;
+  lvz: number;
+  hurtFlash: number;
+  /** Line telegraph (spread/charge) + slam danger ring. */
+  tele: THREE.Mesh;
+  ring: THREE.Mesh;
+}
+
 /** A player or enemy projectile travelling across the field. */
 export interface Projectile {
   mesh: THREE.Mesh;
