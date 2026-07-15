@@ -85,6 +85,8 @@ export class PigeonGame {
   private parts: Particle[] = [];
   private projectiles: Projectile[] = [];
   private arrow!: THREE.Group;
+  private swipe!: THREE.Mesh;
+  private swipeT = 0;
 
   // shared squad alarm — most recent known player location (for coordinated search)
   private alarmX = 0;
@@ -241,6 +243,17 @@ export class PigeonGame {
     arrowG.visible = false;
     scene.add(arrowG);
     this.arrow = arrowG;
+
+    // melee swipe arc (flat sector) — flashes in front on attack to show reach
+    const swGeo = new THREE.CircleGeometry(1, 22, -Math.PI / 2 - 1.15, 2.3);
+    swGeo.rotateX(-Math.PI / 2);
+    this.swipe = new THREE.Mesh(
+      swGeo,
+      new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0, depthWrite: false }),
+    );
+    this.swipe.position.y = 0.08;
+    this.swipe.visible = false;
+    this.fxGroup.add(this.swipe);
 
     this.spawnPlayer();
     this.peersMeshes = {};
@@ -500,11 +513,24 @@ export class PigeonGame {
       );
       tele.visible = false;
       this.fxGroup.add(tele);
+      // small overhead HP bar (billboard sprite, hidden until the guard takes a hit)
+      const hpbar = new THREE.Sprite(
+        new THREE.SpriteMaterial({ color: 0xec3013, depthTest: false }),
+      );
+      hpbar.scale.set(1.2, 0.16, 1);
+      hpbar.position.y = 2.35;
+      hpbar.visible = false;
+      pg.group.add(hpbar);
       const gtype = gd.type ?? 'patrol';
       this.guards.push({
         model: pg,
         cone,
         bang,
+        hp: 3,
+        maxHp: 3,
+        hpbar,
+        hurtFlash: 0,
+        stuckT: 0,
         path: gd.path,
         seg: 0,
         speed: gd.speed * D.gs,
@@ -1014,7 +1040,7 @@ export class PigeonGame {
         while (a > Math.PI) a -= Math.PI * 2;
         while (a < -Math.PI) a += Math.PI * 2;
         if (Math.abs(a) < 1.15) {
-          this.downGuard(G);
+          this.damageGuard(G, cb.dmg);
           hit = true;
         }
       }
@@ -1033,8 +1059,13 @@ export class PigeonGame {
           }
         }
       }
-      // strike puff in front of the player
+      // strike puff + a swipe arc flashing the reach in front of the player
       this.burst(P.pos.x + Math.sin(P.facing) * cb.range * 0.6, P.pos.y + Math.cos(P.facing) * cb.range * 0.6, ACCENT, 6);
+      this.swipe.position.set(P.pos.x, 0.08, P.pos.y);
+      this.swipe.rotation.y = P.facing;
+      this.swipe.scale.setScalar(cb.range);
+      this.swipe.visible = true;
+      this.swipeT = 0.18;
       this.addShake(hit ? 0.2 : 0.09);
       if (hit) this.freeze(0.05);
       this.sfx.ui();
@@ -1123,10 +1154,23 @@ export class PigeonGame {
     G.bang.visible = false;
     G.cone.visible = false;
     G.tele.visible = false;
+    G.hpbar.visible = false;
     G.model.group.rotation.z = Math.PI / 2;
     G.model.group.position.y = 0.15;
     this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
     this.sfx.pickup();
+  }
+
+  /** Deal damage to a guard; downs it at 0 HP. Shows its overhead HP bar. */
+  private damageGuard(G: Guard, dmg: number): void {
+    if (G.down) return;
+    G.hp -= dmg;
+    G.hurtFlash = 1;
+    G.hpbar.visible = true;
+    G.hpbar.scale.x = 1.2 * Math.max(0, G.hp / G.maxHp);
+    this.burst(G.pos.x, G.pos.y, 0xffffff, 5); // white hit spark
+    if (G.hp <= 0) this.downGuard(G);
+    else this.sfx.spotted();
   }
 
   /** Apply damage to the player (with a brief invulnerability window). */
@@ -1961,6 +2005,12 @@ export class PigeonGame {
           this.ghosts.splice(gI, 1);
         }
       }
+      // melee swipe arc fade
+      if (this.swipeT > 0) {
+        this.swipeT -= realDt;
+        (this.swipe.material as THREE.MeshBasicMaterial).opacity = 0.55 * Math.max(0, this.swipeT / 0.18);
+        if (this.swipeT <= 0) this.swipe.visible = false;
+      }
       if (this.mode !== 'play' && this.arrow) this.arrow.visible = false;
       if (this.mode === 'play' && !this.paused) {
         this.stageTime += dt;
@@ -2349,10 +2399,13 @@ export class PigeonGame {
             } else {
               const tp = G.path[(G.seg + 1) % G.path.length];
               const pd = Math.hypot(tp[0] - G.pos.x, tp[1] - G.pos.y);
-              if (pd < 0.4) G.seg = (G.seg + 1) % G.path.length;
-              else {
-                // route around walls (A*) toward the waypoint instead of a straight
-                // line, so patrols don't jam against cover
+              if (pd < 0.4) {
+                G.seg = (G.seg + 1) % G.path.length;
+                G.stuckT = 0;
+              } else {
+                // route around walls (A*) toward the waypoint so patrols don't jam
+                const bx = G.pos.x;
+                const bz = G.pos.y;
                 const wp = this.guardWaypoint(G, tp[0], tp[1], dt);
                 const mdx = wp.x - G.pos.x;
                 const mdz = wp.z - G.pos.y;
@@ -2364,8 +2417,16 @@ export class PigeonGame {
                 while (dg < -Math.PI) dg += Math.PI * 2;
                 G.facing += dg * Math.min(1, dt * 6);
                 gSpeed = G.speed;
+                this.collide(G.pos, 0.55);
+                // anti-stuck: no real progress → skip to the next waypoint
+                if (Math.hypot(G.pos.x - bx, G.pos.y - bz) < G.speed * dt * 0.3) G.stuckT += dt;
+                else G.stuckT = 0;
+                if (G.stuckT > 1) {
+                  G.seg = (G.seg + 1) % G.path.length;
+                  G.navPath = null;
+                  G.stuckT = 0;
+                }
               }
-              this.collide(G.pos, 0.55);
             }
             // detection (also while lured)
             const vdx = P.pos.x - G.pos.x;
@@ -2447,6 +2508,9 @@ export class PigeonGame {
           );
           G.model.group.position.set(G.pos.x, 0, G.pos.y);
           G.model.group.rotation.y = G.facing;
+          // brief scale pulse when hit
+          G.hurtFlash = Math.max(0, G.hurtFlash - dt * 4);
+          G.model.group.scale.setScalar(1.12 * (1 + G.hurtFlash * 0.14));
           // guards lock their gaze onto the player once they notice something
           const gLook =
             G.state === 'chase' || G.state === 'search' || G.detect > 0.2
@@ -2488,7 +2552,7 @@ export class PigeonGame {
             for (const G of this.guards) {
               if (G.down) continue;
               if (Math.hypot(pr.x - G.pos.x, pr.z - G.pos.y) < 0.7) {
-                this.downGuard(G);
+                this.damageGuard(G, pr.dmg);
                 if (!pr.pierce) {
                   gone = true;
                   break;

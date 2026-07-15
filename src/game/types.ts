@@ -129,6 +129,13 @@ export interface Guard {
   goalZ: number;
   /** Combat: taken down by the player (incapacitated, no longer a threat). */
   down: boolean;
+  /** Hit points (takes multiple hits) + a small overhead HP bar. */
+  hp: number;
+  maxHp: number;
+  hpbar: THREE.Sprite;
+  hurtFlash: number;
+  /** Seconds spent making no patrol progress (anti-stuck safety). */
+  stuckT: number;
   /** Attacker behaviour. */
   gtype: GuardType;
   /** Last attack time (s) for cooldown. */
