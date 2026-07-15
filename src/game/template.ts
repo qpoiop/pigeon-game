@@ -13,7 +13,8 @@ export const TPL =
   '   <div class="pg-net">오프라인</div>' +
   '  </div>' +
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
-  '  <div class="pg-hp"></div>' +
+  '  <div class="pg-hurt"></div>' +
+  '  <div class="pg-hp"><span class="pg-hp-ic">♥</span><div class="pg-hp-track"><div class="pg-hp-fill"></div></div><span class="pg-hp-n"></span></div>' +
   '  <div class="pg-bosshp"><span class="l">적 사령관</span><div class="pg-bosshptrack"><div class="pg-bosshpfill"></div></div></div>' +
   '  <div class="pg-peerhp"></div>' +
   '  <canvas class="pg-map" width="150" height="100"></canvas>' +
@@ -28,7 +29,7 @@ export const TPL =
   ' <div class="pg-abilities">' +
   '  <div class="pg-actions">' +
   '   <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="n">대시</i><i class="cd"></i></button>' +
-  '   <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="n">숨기</i></button>' +
+  '   <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="n">숨기</i><i class="cd"></i></button>' +
   '   <button class="pg-slot pri pg-b-skill"><i class="n sk">스킬</i><i class="cd"></i></button>' +
   '   <button class="pg-slot pri pg-b-attack"><i class="n">공격</i></button>' +
   '  </div>' +
@@ -58,9 +59,16 @@ export const CSS =
   '.pg-net.on{color:#ec3013;font-weight:700}' +
   '.pg-alertbar{position:absolute;top:28px;left:0;right:0;height:3px}' +
   '.pg-alertfill{height:100%;width:0%;background:#ec3013;transition:width .1s linear}' +
-  '.pg-hp{position:absolute;top:150px;left:12px;display:flex;gap:3px;pointer-events:none}' +
-  '.pg-hp i{width:19px;height:10px;background:#ec3013;border:1px solid #201e1d;display:block;box-shadow:0 1px 3px rgba(0,0,0,.2)}' +
-  '.pg-hp i.e{background:rgba(32,30,29,.14)}' +
+  // player health gauge — sits top-right under the agent roster
+  '.pg-hp{position:absolute;top:74px;right:10px;display:flex;align-items:center;gap:7px;pointer-events:none;background:rgba(243,242,242,.9);border:2px solid #201e1d;border-radius:5px;padding:4px 9px 4px 7px;box-shadow:0 2px 8px rgba(0,0,0,.22)}' +
+  '.pg-hp-ic{font-size:13px;color:#ec3013;line-height:1}' +
+  '.pg-hp-track{position:relative;width:132px;height:11px;background:rgba(32,30,29,.16);border-radius:6px;overflow:hidden}' +
+  '.pg-hp-fill{position:absolute;inset:0;width:100%;transform-origin:left;background:linear-gradient(90deg,#ec3013,#ff7a52);border-radius:6px;transition:width .18s ease-out}' +
+  '.pg-hp.low .pg-hp-fill{background:linear-gradient(90deg,#c40000,#ec3013);animation:pghppulse .7s ease-in-out infinite}' +
+  '@keyframes pghppulse{0%,100%{opacity:1}50%{opacity:.55}}' +
+  '.pg-hp-n{font:800 12px/1 inherit;color:#201e1d;min-width:30px;text-align:right;letter-spacing:.02em}' +
+  // full-screen red vignette that flashes when the player takes damage
+  '.pg-hurt{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:35;box-shadow:inset 0 0 90px 20px rgba(236,48,19,.75);transition:opacity .05s linear}' +
   '.pg-bosshp{position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(440px,74%);display:none;text-align:center;pointer-events:none}' +
   '.pg-bosshp.show{display:block}' +
   '.pg-bosshp .l{font:800 10px/1 inherit;letter-spacing:.2em;color:#ec3013;text-transform:uppercase}' +

@@ -63,21 +63,27 @@ function normalizeModel(
   skinned = false,
 ): THREE.Group {
   root.updateWorldMatrix(true, true);
-  // A skinned model keeps its authored normals + textured material (recomputing
-  // or swapping would break shading / lose the baked texture). Rig-less static
-  // meshes get recomputed normals (simplify drops them) + the lit vertex-colour
-  // material so they match the game's look.
-  if (!skinned) {
-    root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.castShadow = false;
+    m.receiveShadow = false;
+    // skinned bounds animate out of the bind-pose box → don't frustum-cull them
+    m.frustumCulled = false;
+    if (skinned) {
+      // keep the baked texture, but move it onto the game's lit material so it
+      // reads under the scene lights (imported PBR often renders near-black here)
+      const src = m.material as THREE.MeshStandardMaterial | undefined;
+      const map = src && 'map' in src ? src.map : null;
+      m.material = new THREE.MeshLambertMaterial({ color: 0xffffff, map: map ?? null });
+    } else {
+      // rig-less static mesh: recompute normals (simplify drops them) + lit
+      // vertex-colour material so it matches the game's look
       m.geometry.computeVertexNormals();
       const hasColor = !!m.geometry.getAttribute('color');
       m.material = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: hasColor });
-      m.castShadow = false;
-      m.receiveShadow = false;
-    });
-  }
+    }
+  });
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());

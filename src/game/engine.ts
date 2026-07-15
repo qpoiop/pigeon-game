@@ -83,6 +83,8 @@ export class PigeonGame {
   private arrow!: THREE.Group;
   private swipe!: THREE.Mesh;
   private swipeT = 0;
+  private hurtFxUntil = 0;
+  private crouchT = -100;
   private aiming = false;
   private aimLine!: THREE.Mesh;
 
@@ -133,6 +135,7 @@ export class PigeonGame {
   private lastGhost = 0;
   private lastBump = 0;
   private paused = false;
+  private onPop?: () => void;
   private installEvt: { prompt: () => void; userChoice: Promise<unknown> } | null = null;
   private canInstall = false;
   private rosterT = 0;
@@ -186,6 +189,19 @@ export class PigeonGame {
     this.setupInput();
     this.setupHudButtons();
     this.showTitle();
+    // guard the hardware/browser back button: keep one history entry ahead so a
+    // back press never closes the app — it pauses live play, and is swallowed on
+    // menus/overlays instead of exiting.
+    try {
+      history.pushState({ pg: 1 }, '');
+      this.onPop = () => {
+        history.pushState({ pg: 1 }, ''); // re-arm
+        if (this.mode === 'play' && !this.paused) this.pause();
+      };
+      window.addEventListener('popstate', this.onPop);
+    } catch {
+      /* history unavailable (non-browser env) — ignore */
+    }
     // load any registered 3D bird models in the background; spawns before this
     // resolves (or when MODELS is empty) fall back to the procedural makeBird.
     // once loaded, re-spawn on the menu so the sourced model swaps in for its char.
@@ -974,9 +990,21 @@ export class PigeonGame {
     });
   }
 
+  private static readonly CROUCH_CD = 4.5;
   private toggleCrouch(): void {
     if (this.mode !== 'play' || this.player.downed) return;
-    this.player.crouch = !this.player.crouch;
+    const now = performance.now() / 1000;
+    if (this.player.crouch) {
+      // standing up is always allowed; the cooldown runs from when you stand
+      this.player.crouch = false;
+      this.crouchT = now;
+    } else {
+      if (now - this.crouchT < PigeonGame.CROUCH_CD) {
+        this.toast('숨기 재사용 대기 중');
+        return;
+      }
+      this.player.crouch = true;
+    }
     this.$('.pg-b-crouch').classList.toggle('onn', this.player.crouch);
     this.sfx.ensure();
     this.sfx.ui();
@@ -1244,6 +1272,7 @@ export class PigeonGame {
     if (P.downed) return; // already incapacitated
     if (now < P.hurtUntil || now < P.braceUntil) return; // i-frames or brace immunity
     P.hurtUntil = now + 700;
+    this.hurtFxUntil = now + 340; // red screen vignette flash
     // all hurtPlayer callers are enemy sources → scale by difficulty
     P.hp -= Math.max(1, Math.round(dmg * DIFFS[this.diffId].atk));
     this.addShake(0.32);
@@ -1311,9 +1340,10 @@ export class PigeonGame {
   private updHp(): void {
     const P = this.player;
     if (!P) return;
-    let s = '';
-    for (let i = 0; i < P.maxHp; i++) s += i < P.hp ? '<i></i>' : '<i class="e"></i>';
-    this.$('.pg-hp').innerHTML = s;
+    const ratio = P.maxHp > 0 ? Math.max(0, P.hp / P.maxHp) : 0;
+    this.$<HTMLElement>('.pg-hp-fill').style.width = ratio * 100 + '%';
+    this.$('.pg-hp-n').textContent = Math.max(0, Math.ceil(P.hp)) + ' / ' + P.maxHp;
+    this.$<HTMLElement>('.pg-hp').classList.toggle('low', ratio <= 0.34);
   }
 
   /** Co-op: teammate HP pips + downed marker. */
@@ -1351,6 +1381,14 @@ export class PigeonGame {
     slot('.pg-b-skill', P.skillT, C.skill.cd);
     slot('.pg-b-dash', this.dashT, C.dashCd);
     this.$('.pg-b-attack').classList.toggle('dim', t - P.atkT < C.combat.atkCd);
+    // crouch shows its reuse cooldown only while standing
+    if (P.crouch) {
+      const cr = this.$<HTMLElement>('.pg-b-crouch .cd');
+      cr.style.background = 'transparent';
+      cr.textContent = '';
+    } else {
+      slot('.pg-b-crouch', this.crouchT, PigeonGame.CROUCH_CD);
+    }
   }
 
   /* ---------- Boss ---------- */
@@ -2022,6 +2060,11 @@ export class PigeonGame {
           this.ghosts.splice(gI, 1);
         }
       }
+      // damage vignette flash (drains after a hit)
+      {
+        const hv = Math.max(0, (this.hurtFxUntil - now) / 340);
+        this.$<HTMLElement>('.pg-hurt').style.opacity = String(hv * 0.9);
+      }
       // melee swipe arc fade
       if (this.swipeT > 0) {
         this.swipeT -= realDt;
@@ -2141,25 +2184,33 @@ export class PigeonGame {
           if (this.coHostEsc === 1 && gp && this.coGuestEsc === 0)
             this.$('.pg-objective').textContent = '동료의 탈출을 기다리는 중…';
         }
-        // objective arrow — point at nearest un-got film, or the exit once ready
+        // primary clear condition: defeat every guard on non-boss stages (host/solo
+        // decides; the guest gets the cleared flag via the world snapshot)
+        if (!this.boss && this.net.role() !== 'guest') {
+          let alive = 0;
+          for (const g of this.guards) if (!g.down) alive++;
+          this.$('.pg-objective').textContent =
+            alive > 0 ? '목표 — 적 전원 제압 · 남은 적 ' + alive : '적 소탕 완료';
+          if (alive === 0 && this.mode === 'play') this.clearStage();
+        }
+        // objective arrow — on boss stages point at the boss; otherwise at the
+        // nearest surviving guard (clear = defeat them all)
         let atx: number | null = null;
         let atz: number | null = null;
-        if (!ready) {
+        if (this.boss) {
+          atx = this.boss.pos.x;
+          atz = this.boss.pos.y;
+        } else {
           let bd2 = 1e9;
-          for (let af = 0; af < this.films.length; af++) {
-            const afl = this.films[af];
-            if (afl.got) continue;
-            const ad2 =
-              (afl.x - P.pos.x) * (afl.x - P.pos.x) + (afl.z - P.pos.y) * (afl.z - P.pos.y);
+          for (const g of this.guards) {
+            if (g.down) continue;
+            const ad2 = (g.pos.x - P.pos.x) ** 2 + (g.pos.y - P.pos.y) ** 2;
             if (ad2 < bd2) {
               bd2 = ad2;
-              atx = afl.x;
-              atz = afl.z;
+              atx = g.pos.x;
+              atz = g.pos.y;
             }
           }
-        } else {
-          atx = ex[0];
-          atz = ex[1];
         }
         if (this.arrow) {
           if (atx !== null && atz !== null) {
