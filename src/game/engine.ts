@@ -298,20 +298,23 @@ export class PigeonGame {
     this.decoys = [];
 
     const mat = (c: number) => new THREE.MeshLambertMaterial({ color: c });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(L.w, L.d), mat(PAPER));
+    // per-level theme gives each stage its own palette; fall back to paper/ink
+    const th = L.theme ?? { ground: PAPER, outer: 0xe2e0de, grid: 0xd8d5d3, wall: INK };
+    this.scene.background = new THREE.Color(th.outer); // backdrop matches the stage
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(L.w, L.d), mat(th.ground));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.levelGroup.add(ground);
-    const outer = new THREE.Mesh(new THREE.PlaneGeometry(L.w + 80, L.d + 80), mat(0xe2e0de));
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(L.w + 80, L.d + 80), mat(th.outer));
     outer.rotation.x = -Math.PI / 2;
     outer.position.y = -0.02;
     outer.receiveShadow = true;
     this.levelGroup.add(outer);
-    const grid = new THREE.GridHelper(Math.max(L.w, L.d), Math.max(L.w, L.d) / 2, 0xd8d5d3, 0xd8d5d3);
+    const grid = new THREE.GridHelper(Math.max(L.w, L.d), Math.max(L.w, L.d) / 2, th.grid, th.grid);
     grid.position.y = 0.01;
     this.levelGroup.add(grid);
 
-    const frameMat = mat(INK);
+    const frameMat = mat(th.wall);
     const bar = (x: number, z: number, w: number, d: number, h: number, m?: THREE.Material) => {
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m || frameMat);
       b.position.set(x, h / 2, z);

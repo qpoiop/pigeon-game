@@ -42,7 +42,8 @@ export const CHARS: Record<CharId, CharDef> = {
     detect: 1,
     dashCd: 1.4,
     kind: 'pigeon',
-    pal: { body: 0xe8e6e4, head: 0x35322f, wing: 0x201e1d, accent: ACCENT },
+    // cool slate-grey with the signature red beak/beret
+    pal: { body: 0xdfe4ea, head: 0x2f3540, wing: 0x232830, accent: ACCENT },
   },
   magpie: {
     name: '까치',
@@ -52,7 +53,8 @@ export const CHARS: Record<CharId, CharDef> = {
     detect: 1.18,
     dashCd: 0.9,
     kind: 'magpie',
-    pal: { body: 0x201e1d, head: 0x201e1d, wing: 0xf3f2f2, accent: ACCENT },
+    // bold black-and-white with an iridescent cyan accent
+    pal: { body: 0x17171a, head: 0x17171a, wing: 0xf3f2f2, accent: 0x18a6c4 },
   },
   owl: {
     name: '부엉이',
@@ -62,7 +64,8 @@ export const CHARS: Record<CharId, CharDef> = {
     detect: 0.68,
     dashCd: 1.8,
     kind: 'owl',
-    pal: { body: 0xbdb4a9, head: 0xa39a8e, wing: 0x6d675f, accent: ACCENT },
+    // warm tan/brown with an amber accent
+    pal: { body: 0xcbb79a, head: 0xa2886a, wing: 0x6a5540, accent: 0xe0a021 },
   },
 };
 

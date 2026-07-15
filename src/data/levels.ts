@@ -24,11 +24,21 @@ export interface GuardSpawn {
   range: number;
 }
 
+/** Per-level colour theme so stages read as distinct places (hex ints). */
+export interface LevelTheme {
+  ground: number;
+  outer: number;
+  grid: number;
+  wall: number;
+}
+
 export interface LevelDef {
   name: string;
   /** Playfield width / depth (m). */
   w: number;
   d: number;
+  /** Optional colour theme; engine falls back to the default paper/ink look. */
+  theme?: LevelTheme;
   /** Mission briefing text (Korean). */
   brief: string;
   /** Player spawn [x, z]. */
@@ -46,6 +56,7 @@ export interface LevelDef {
 export const LEVELS: LevelDef[] = [
   {
     name: '01 — 외곽 훈련 구역',
+    theme: { ground: 0xe9e7e5, outer: 0xe2e0de, grid: 0xd8d5d3, wall: 0x201e1d },
     w: 60,
     d: 40,
     brief:
@@ -88,6 +99,7 @@ export const LEVELS: LevelDef[] = [
   },
   {
     name: '02 — 기록 보관소',
+    theme: { ground: 0xdbe1e3, outer: 0xccd3d5, grid: 0xbfc7c9, wall: 0x222a2e },
     w: 76,
     d: 50,
     brief:
@@ -134,6 +146,7 @@ export const LEVELS: LevelDef[] = [
   },
   {
     name: '03 — 중앙 관제',
+    theme: { ground: 0xece0d2, outer: 0xe3d6c4, grid: 0xd7cab6, wall: 0x2e2620 },
     w: 90,
     d: 60,
     brief: '심장부다. 필름 6개, 경비 6명. 순찰이 빠르고 시야가 넓다. 조용히, 확실하게.',
