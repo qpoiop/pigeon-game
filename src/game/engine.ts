@@ -25,7 +25,6 @@ import { TPL, CSS } from './template';
 import type {
   BestScore,
   Bounds,
-  Decoy,
   Film,
   GameOptions,
   Guard,
@@ -55,7 +54,6 @@ export class PigeonGame {
   private net: Net;
   charId: CharId = 'pigeon';
   diffId: DiffId = 'normal';
-  private inv = { decoy: 0, smoke: 0 };
 
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
@@ -74,7 +72,6 @@ export class PigeonGame {
   private boss: Boss | null = null;
   private films: Film[] = [];
   private items: Item[] = [];
-  private decoys: Decoy[] = [];
   private walls: Bounds[] = [];
   private covers: Bounds[] = [];
   private nav!: NavGrid;
@@ -348,7 +345,6 @@ export class PigeonGame {
     this.guards = [];
     this.films = [];
     this.items = [];
-    this.decoys = [];
 
     const mat = (c: number) => new THREE.MeshLambertMaterial({ color: c });
     // per-level theme gives each stage its own palette; fall back to paper/ink
@@ -545,8 +541,8 @@ export class PigeonGame {
       const hpbar = new THREE.Sprite(
         new THREE.SpriteMaterial({ color: 0xec3013, depthTest: false }),
       );
-      hpbar.scale.set(1.2, 0.16, 1);
-      hpbar.position.y = 2.35;
+      hpbar.scale.set(1.9, 0.3, 1);
+      hpbar.position.y = 2.5;
       hpbar.visible = false;
       pg.group.add(hpbar);
       const gtype = gd.type ?? 'radial';
@@ -665,7 +661,6 @@ export class PigeonGame {
     this.extractT = 0;
     this.stageTime = 0;
     this.spotted = 0;
-    this.inv = { decoy: D.start.decoy, smoke: D.start.smoke };
     const mpc = this.$<HTMLCanvasElement>('.pg-map');
     if (mpc) {
       mpc.width = 150;
@@ -673,7 +668,6 @@ export class PigeonGame {
     }
     this.$('.pg-stage').textContent = L.name;
     this.updFilms();
-    this.updInv();
     this.updHp();
     this.updBossHp();
     this.$('.pg-objective').textContent = this.boss
@@ -685,14 +679,6 @@ export class PigeonGame {
   /* ---------- HUD updates ---------- */
   private updFilms(): void {
     this.$('.pg-films').innerHTML = '필름 <b>' + this.filmCount + '</b>/' + this.level.films.length;
-  }
-  private updInv(): void {
-    const d = this.$<HTMLElement>('.pg-b-decoy');
-    const s = this.$<HTMLElement>('.pg-b-smoke');
-    d.querySelector('.ct')!.textContent = String(this.inv.decoy);
-    s.querySelector('.ct')!.textContent = String(this.inv.smoke);
-    d.classList.toggle('dim', this.inv.decoy <= 0);
-    s.classList.toggle('dim', this.inv.smoke <= 0);
   }
   private toast(msg: string): void {
     const el = this.$('.pg-toast');
@@ -759,14 +745,6 @@ export class PigeonGame {
       '<li><span>회수 지점 탈출</span>' +
       (ready ? '<span class="ok">개방됨</span>' : '<span class="todo">필름 전부 필요</span>') +
       '</li></ul>';
-    h +=
-      '<h3>장비</h3><ul>' +
-      '<li><span>미끼 (1키) — 경비를 유인</span><b>' +
-      this.inv.decoy +
-      '</b></li>' +
-      '<li><span>연막 (2키) — 5초 은신</span><b>' +
-      this.inv.smoke +
-      '</b></li></ul>';
     h +=
       '<h3>요원 — ' +
       CHARS[this.charId].name +
@@ -902,8 +880,6 @@ export class PigeonGame {
         this.dash();
         e.preventDefault();
       }
-      if (e.code === 'Digit1') this.useDecoy();
-      if (e.code === 'Digit2') this.useSmoke();
       if (e.code === 'KeyF' || e.code === 'KeyJ') this.attack();
       if ((e.code === 'KeyE' || e.code === 'KeyK') && !e.repeat) this.skillPress();
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
@@ -996,14 +972,6 @@ export class PigeonGame {
       e.preventDefault();
       this.toggleCrouch();
     });
-    this.$('.pg-b-decoy').addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.useDecoy();
-    });
-    this.$('.pg-b-smoke').addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.useSmoke();
-    });
   }
 
   private toggleCrouch(): void {
@@ -1086,20 +1054,23 @@ export class PigeonGame {
     this.sfx.ensure();
     if (cb.atk === 'ranged') {
       this.spawnProjectile(P.pos.x, P.pos.y, P.facing, cb.dmg, cb.projSpeed ?? 24, false);
-      this.addShake(0.07);
-      this.kickZoom(0.4);
+      // muzzle flash so the shot reads clearly
+      this.burst(P.pos.x + Math.sin(P.facing) * 0.9, P.pos.y + Math.cos(P.facing) * 0.9, 0x18a6c4, 8);
+      this.addShake(0.09);
+      this.kickZoom(0.5);
       this.sfx.dash();
     } else {
+      const reach = cb.range * 1.4; // longer reach + a wider arc so hits land
       let hit = false;
       for (const G of this.guards) {
         if (G.down) continue;
         const dx = G.pos.x - P.pos.x;
         const dz = G.pos.y - P.pos.y;
-        if (Math.hypot(dx, dz) > cb.range) continue;
+        if (Math.hypot(dx, dz) > reach) continue;
         let a = Math.atan2(dx, dz) - P.facing;
         while (a > Math.PI) a -= Math.PI * 2;
         while (a < -Math.PI) a += Math.PI * 2;
-        if (Math.abs(a) < 1.15) {
+        if (Math.abs(a) < 1.3) {
           this.damageGuard(G, cb.dmg);
           hit = true;
         }
@@ -1109,25 +1080,30 @@ export class PigeonGame {
       if (bs && bs.hp > 0) {
         const dx = bs.pos.x - P.pos.x;
         const dz = bs.pos.y - P.pos.y;
-        if (Math.hypot(dx, dz) < cb.range + 1.6) {
+        if (Math.hypot(dx, dz) < reach + 1.6) {
           let a = Math.atan2(dx, dz) - P.facing;
           while (a > Math.PI) a -= Math.PI * 2;
           while (a < -Math.PI) a += Math.PI * 2;
-          if (Math.abs(a) < 1.2) {
+          if (Math.abs(a) < 1.3) {
             this.damageBoss(cb.dmg);
             hit = true;
           }
         }
       }
-      // strike puff + a swipe arc flashing the reach in front of the player
-      this.burst(P.pos.x + Math.sin(P.facing) * cb.range * 0.6, P.pos.y + Math.cos(P.facing) * cb.range * 0.6, ACCENT, 6);
+      // bigger strike puff + a wide swipe arc flashing the reach in front
+      this.burst(
+        P.pos.x + Math.sin(P.facing) * reach * 0.55,
+        P.pos.y + Math.cos(P.facing) * reach * 0.55,
+        ACCENT,
+        hit ? 16 : 10,
+      );
       this.swipe.position.set(P.pos.x, 0.08, P.pos.y);
       this.swipe.rotation.y = P.facing;
-      this.swipe.scale.setScalar(cb.range);
+      this.swipe.scale.setScalar(reach * 1.15);
       this.swipe.visible = true;
-      this.swipeT = 0.18;
-      this.addShake(hit ? 0.2 : 0.09);
-      if (hit) this.freeze(0.05);
+      this.swipeT = 0.24;
+      this.addShake(hit ? 0.28 : 0.12);
+      if (hit) this.freeze(0.06);
       this.sfx.ui();
     }
   }
@@ -1143,7 +1119,7 @@ export class PigeonGame {
     pierce = false,
   ): void {
     const m = new THREE.Mesh(
-      new THREE.SphereGeometry(pierce ? 0.24 : 0.16, 8, 6),
+      new THREE.SphereGeometry(pierce ? 0.32 : 0.26, 10, 8),
       new THREE.MeshBasicMaterial({ color: enemy ? ACCENT : pierce ? 0xe0a021 : 0x18a6c4 }),
     );
     m.position.set(x, 0.7, z);
@@ -1246,8 +1222,17 @@ export class PigeonGame {
     G.aggro = 3; // getting hit alerts the guard even without line of sight
     G.hurtFlash = 1;
     G.hpbar.visible = true;
-    G.hpbar.scale.x = 1.2 * Math.max(0, G.hp / G.maxHp);
-    this.burst(G.pos.x, G.pos.y, 0xffffff, 5); // white hit spark
+    G.hpbar.scale.x = 1.9 * Math.max(0, G.hp / G.maxHp);
+    // knock the guard back off the player + a bold two-tone hit spark
+    const kx = G.pos.x - this.player.pos.x;
+    const kz = G.pos.y - this.player.pos.y;
+    const kl = Math.hypot(kx, kz) || 1;
+    G.pos.x += (kx / kl) * 0.5;
+    G.pos.y += (kz / kl) * 0.5;
+    this.collide(G.pos, 0.55);
+    this.burst(G.pos.x, G.pos.y, ACCENT, 12);
+    this.burst(G.pos.x, G.pos.y, 0xffffff, 8);
+    this.addShake(0.12);
     if (G.hp <= 0) this.downGuard(G);
     else this.sfx.spotted();
   }
@@ -1484,57 +1469,6 @@ export class PigeonGame {
     b.model.group.rotation.y = b.facing;
     b.model.group.scale.setScalar(2.6 * (1 + b.hurtFlash * 0.06));
     animBird(b.model, { speed: b.phase === 2 ? 18 : 2, dt, t, crouch: false });
-  }
-
-  private useDecoy(): void {
-    if (this.mode !== 'play' || this.player.downed) return;
-    if (this.inv.decoy <= 0) {
-      this.toast('미끼가 없다 — 맵에서 회수하라');
-      return;
-    }
-    this.inv.decoy--;
-    this.updInv();
-    this.updDrawer();
-    this.sfx.ensure();
-    this.sfx.use();
-    const P = this.player;
-    const dx = Math.sin(P.facing);
-    const dz = Math.cos(P.facing);
-    const x = P.pos.x + dx * 3;
-    const z = P.pos.y + dz * 3;
-    const g = new THREE.Group();
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.34, 0.34, 0.34),
-      new THREE.MeshLambertMaterial({ color: INK }),
-    );
-    cube.position.y = 0.2;
-    cube.castShadow = true;
-    g.add(cube);
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.6, 0.03, 8, 32),
-      new THREE.MeshBasicMaterial({ color: ACCENT }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.05;
-    g.add(ring);
-    g.position.set(x, 0, z);
-    this.fxGroup.add(g);
-    this.decoys.push({ x, z, mesh: g, t: 6 });
-    this.toast('미끼 투척 — 경비가 유인된다');
-  }
-  private useSmoke(): void {
-    if (this.mode !== 'play' || this.player.downed) return;
-    if (this.inv.smoke <= 0) {
-      this.toast('연막이 없다 — 맵에서 회수하라');
-      return;
-    }
-    this.inv.smoke--;
-    this.updInv();
-    this.updDrawer();
-    this.sfx.ensure();
-    this.sfx.use();
-    this.player.smokeUntil = performance.now() / 1000 + 5;
-    this.toast('연막 전개 — 5초간 은신');
   }
 
   /* ---------- Overlays ---------- */
@@ -2091,7 +2025,7 @@ export class PigeonGame {
       // melee swipe arc fade
       if (this.swipeT > 0) {
         this.swipeT -= realDt;
-        (this.swipe.material as THREE.MeshBasicMaterial).opacity = 0.55 * Math.max(0, this.swipeT / 0.18);
+        (this.swipe.material as THREE.MeshBasicMaterial).opacity = 0.72 * Math.max(0, this.swipeT / 0.24);
         if (this.swipeT <= 0) this.swipe.visible = false;
       }
       if (this.mode !== 'play' && this.arrow) this.arrow.visible = false;
@@ -2176,32 +2110,6 @@ export class PigeonGame {
               this.$('.pg-objective').textContent = '목표 — 적색 회수 구역으로 탈출하라';
               this.toast('필름 전부 회수 — 탈출구 개방');
             }
-          }
-        }
-        // items
-        for (const itm of this.items) {
-          if (itm.got) continue;
-          itm.core.rotation.y = t * 1.6;
-          if (Math.hypot(itm.x - P.pos.x, itm.z - P.pos.y) < 1.1) {
-            itm.got = true;
-            itm.mesh.visible = false;
-            this.burst(itm.x, itm.z, MID, 8);
-            this.addShake(0.07);
-            this.inv[itm.t]++;
-            this.updInv();
-            this.updDrawer();
-            this.sfx.item();
-            this.toast(itm.t === 'decoy' ? '미끼 획득 (1키)' : '연막 획득 (2키)');
-          }
-        }
-        // decoys tick
-        for (let dI = this.decoys.length - 1; dI >= 0; dI--) {
-          const dc = this.decoys[dI];
-          dc.t -= dt;
-          dc.mesh.children[1].scale.setScalar(1 + Math.sin(t * 5) * 0.15);
-          if (dc.t <= 0) {
-            this.fxGroup.remove(dc.mesh);
-            this.decoys.splice(dI, 1);
           }
         }
         // extraction — co-op: both agents must hold the exit zone together
@@ -2611,7 +2519,7 @@ export class PigeonGame {
     const D = DIFFS[this.diffId];
     const AWARE = 10 * D.gr;
     const ALERT = 6 * D.gr;
-    const windDur = 1.0 * D.wind;
+    const windDur = 1.35 * D.wind;
     const cdDur = 2.4;
     const ZR = 4.5;
     const ZL = 11;
@@ -2705,9 +2613,9 @@ export class PigeonGame {
       G.cone.visible = false;
       G.model.group.position.set(G.pos.x, 0, G.pos.y);
       G.model.group.rotation.y = G.facing;
-      G.model.group.scale.setScalar(1.12 * (1 + G.hurtFlash * 0.14));
+      G.model.group.scale.setScalar(1.12 * (1 + G.hurtFlash * 0.32));
       G.hpbar.visible = G.hp < G.maxHp;
-      G.hpbar.scale.x = 1.2 * Math.max(0, G.hp / G.maxHp);
+      G.hpbar.scale.x = 1.9 * Math.max(0, G.hp / G.maxHp);
       const gLook = aware ? clamp(angleDelta(Math.atan2(adx, adz), G.facing), -0.8, 0.8) : 0;
       animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false, lookYaw: gLook });
     }

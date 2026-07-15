@@ -110,10 +110,7 @@ export const LEVELS: LevelDef[] = [
       [-27, 3],
       [27, 3],
     ],
-    items: [
-      { t: 'decoy', x: -10, z: 13 },
-      { t: 'smoke', x: 10, z: -13 },
-    ],
+    items: [],
     guards: [
       { path: [[-18, 4], [18, 4]], speed: 2.2, range: 8 },
       { path: [[-20, -12], [-2, -12]], speed: 2.3, range: 8, type: 'radial' },
@@ -160,11 +157,7 @@ export const LEVELS: LevelDef[] = [
       [-30, -13],
       [30, 19],
     ],
-    items: [
-      { t: 'decoy', x: -30, z: 3 },
-      { t: 'decoy', x: 30, z: -13 },
-      { t: 'smoke', x: 0, z: 11 },
-    ],
+    items: [],
     guards: [
       { path: [[-30, 11], [30, 11]], speed: 2.4, range: 8.5, type: 'line' },
       { path: [[30, 3], [-30, 3]], speed: 2.4, range: 8.5 },
@@ -212,12 +205,7 @@ export const LEVELS: LevelDef[] = [
       [40, -24],
       [0, 20],
     ],
-    items: [
-      { t: 'decoy', x: -30, z: 22 },
-      { t: 'smoke', x: 30, z: 22 },
-      { t: 'decoy', x: 0, z: -20 },
-      { t: 'smoke', x: -40, z: 0 },
-    ],
+    items: [],
     guards: [
       { path: [[-16, 11], [16, 11]], speed: 2.7, range: 9, type: 'line' },
       { path: [[16, -11], [-16, -11]], speed: 2.7, range: 9, type: 'radial' },
@@ -248,10 +236,7 @@ export const LEVELS: LevelDef[] = [
     ],
     covers: [{ x: 0, z: 10, w: 5, d: 3 }],
     films: [],
-    items: [
-      { t: 'smoke', x: -24, z: 18 },
-      { t: 'smoke', x: 24, z: 18 },
-    ],
+    items: [],
     guards: [],
   },
 ];

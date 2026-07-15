@@ -26,16 +26,11 @@ export const TPL =
   '  <div class="pg-dr-bd"></div>' +
   ' </div>' +
   ' <div class="pg-abilities">' +
-  '  <div class="pg-items">' +
-  '   <span class="pg-gl">아이템</span>' +
-  '   <button class="pg-slot sm pg-b-decoy"><i class="ic">◆</i><i class="n">미끼</i><i class="ct"></i></button>' +
-  '   <button class="pg-slot sm pg-b-smoke"><i class="ic">☁</i><i class="n">연막</i><i class="ct"></i></button>' +
-  '  </div>' +
   '  <div class="pg-actions">' +
-  '   <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="ic">»</i><i class="n">대시</i><i class="cd"></i></button>' +
-  '   <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="ic">◐</i><i class="n">숨기</i></button>' +
-  '   <button class="pg-slot pri pg-b-skill"><i class="ic">✦</i><i class="n sk">스킬</i><i class="cd"></i></button>' +
-  '   <button class="pg-slot pri pg-b-attack"><i class="ic">✱</i><i class="n">공격</i></button>' +
+  '   <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="n">대시</i><i class="cd"></i></button>' +
+  '   <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="n">숨기</i></button>' +
+  '   <button class="pg-slot pri pg-b-skill"><i class="n sk">스킬</i><i class="cd"></i></button>' +
+  '   <button class="pg-slot pri pg-b-attack"><i class="n">공격</i></button>' +
   '  </div>' +
   ' </div>' +
   ' <button class="pg-install">앱 설치 ↓</button>' +
@@ -103,24 +98,19 @@ export const CSS =
   '.pg-dr-bd .brief{color:#3c3937;margin:0}' +
   /* touch */
   /* ability bar (Duckov-style slots with cooldown sweeps) */
-  '.pg-abilities{position:absolute;bottom:14px;right:12px;display:flex;flex-direction:column;align-items:flex-end;gap:9px;z-index:10;pointer-events:auto}' +
-  '.pg-items{display:flex;align-items:center;gap:6px}' +
-  '.pg-gl{font:800 8px/1 inherit;letter-spacing:.14em;color:#8a8683;text-transform:uppercase;margin-right:2px;writing-mode:horizontal-tb}' +
-  '.pg-actions{display:grid;grid-template-columns:repeat(2,56px);grid-auto-rows:56px;gap:6px}' +
-  '.pg-slot{position:relative;overflow:hidden;width:56px;height:56px;border:2px solid #201e1d;background:rgba(243,242,242,.82);color:#201e1d;padding:0;cursor:pointer}' +
-  '.pg-slot.sm{width:44px;height:44px;background:rgba(243,242,242,.72)}' +
-  '.pg-slot.pri{border-color:#ec3013;border-width:2.5px}' +
+  '.pg-abilities{position:absolute;bottom:16px;right:14px;display:flex;flex-direction:column;align-items:flex-end;z-index:10;pointer-events:auto}' +
+  '.pg-actions{display:grid;grid-template-columns:repeat(2,72px);grid-auto-rows:72px;gap:9px}' +
+  '.pg-slot{position:relative;overflow:hidden;width:72px;height:72px;border:2px solid #201e1d;background:rgba(243,242,242,.85);color:#201e1d;padding:0;cursor:pointer;border-radius:4px}' +
+  '.pg-slot.pri{border-color:#ec3013;border-width:3px}' +
   '.pg-slot.aim{background:#e0a021;color:#201e1d}' +
   '.pg-slot:active{background:#ec3013;color:#f3f2f2;border-color:#ec3013}' +
   '.pg-slot.onn{background:#201e1d;color:#f3f2f2}' +
   '.pg-slot.dim{opacity:.4}' +
   '.pg-slot .k{position:absolute;top:2px;left:4px;font:700 8px/1 inherit;letter-spacing:.04em;color:#8a8683;font-style:normal}' +
   '.pg-slot.onn .k{color:#c9c6c3}' +
-  '.pg-slot .ic{position:absolute;left:0;right:0;top:11px;text-align:center;font:400 19px/1 inherit;font-style:normal}' +
-  '.pg-slot.sm .ic{top:7px;font-size:16px}' +
-  '.pg-slot .n{position:absolute;left:0;right:0;bottom:3px;text-align:center;font:700 8px/1 inherit;letter-spacing:.02em;font-style:normal;white-space:nowrap}' +
-  '.pg-slot .cd{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;font:800 16px/1 inherit;color:#201e1d}' +
-  '.pg-slot .ct{position:absolute;top:2px;right:4px;font:800 11px/1 inherit;font-style:normal;color:#ec3013}' +
+  '.pg-slot .n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font:800 16px/1.1 inherit;letter-spacing:.01em;font-style:normal;white-space:nowrap}' +
+  '.pg-slot.pri .n{font-size:18px}' +
+  '.pg-slot .cd{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;font:800 22px/1 inherit;color:#201e1d;background:transparent}' +
   /* overlay */
   '.pg-install{position:absolute;top:10px;right:12px;z-index:50;display:none;border:2px solid #ec3013;background:#ec3013;color:#f3f2f2;font:800 12px/1 inherit;letter-spacing:.08em;padding:9px 13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}' +
   '.pg-install.show{display:block}' +

@@ -16,14 +16,13 @@ export interface DiffDef {
   wind: number;
   /** Boss HP multiplier. */
   bhp: number;
-  /** Starting inventory. */
-  start: { decoy: number; smoke: number };
 }
 
 export const DIFFS: Record<DiffId, DiffDef> = {
-  easy: { name: '쉬움', gs: 0.62, gr: 0.85, dt: 1.05, atk: 0.6, wind: 1.35, bhp: 0.7, start: { decoy: 1, smoke: 1 } },
-  normal: { name: '보통', gs: 0.82, gr: 1.0, dt: 0.75, atk: 1.0, wind: 1.0, bhp: 1.0, start: { decoy: 1, smoke: 0 } },
-  hard: { name: '어려움', gs: 1.02, gr: 1.15, dt: 0.55, atk: 1.5, wind: 0.7, bhp: 1.3, start: { decoy: 0, smoke: 0 } },
+  // wind is higher = slower attack-telegraph fill = more time to dodge
+  easy: { name: '쉬움', gs: 0.62, gr: 0.85, dt: 1.05, atk: 0.6, wind: 1.75, bhp: 0.7 },
+  normal: { name: '보통', gs: 0.82, gr: 1.0, dt: 0.75, atk: 1.0, wind: 1.25, bhp: 1.0 },
+  hard: { name: '어려움', gs: 1.02, gr: 1.15, dt: 0.55, atk: 1.5, wind: 0.9, bhp: 1.3 },
 };
 
 export const DIFF_ORDER: DiffId[] = Object.keys(DIFFS);
