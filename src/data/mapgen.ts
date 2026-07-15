@@ -1,4 +1,22 @@
-import type { LevelDef, LevelTheme, Rect, GuardSpawn } from './levels';
+import type { LevelDef, LevelTheme, Rect, GuardSpawn, GuardType } from './levels';
+
+/** Enemy classes the generator draws from, so mobs vary in HP / speed / reach /
+ *  attack shape / size instead of all being identical grunts. */
+const GUARD_CLASSES: {
+  cls: string;
+  hp: number;
+  speed: number;
+  range: number;
+  type: GuardType;
+  scale: number;
+  tint: number;
+}[] = [
+  { cls: 'scout', hp: 2, speed: 2.9, range: 7, type: 'radial', scale: 0.95, tint: 0x3fae6b },
+  { cls: 'guard', hp: 3, speed: 2.3, range: 8.5, type: 'radial', scale: 1.1, tint: 0x8a8683 },
+  { cls: 'guard', hp: 3, speed: 2.2, range: 9, type: 'line', scale: 1.1, tint: 0x8a8683 },
+  { cls: 'heavy', hp: 5, speed: 1.6, range: 8, type: 'radial', scale: 1.4, tint: 0xec3013 },
+  { cls: 'sniper', hp: 3, speed: 2.0, range: 13, type: 'line', scale: 1.05, tint: 0xe0a021 },
+];
 
 /**
  * Procedural corridor-maze generator. Produces a `LevelDef` compatible with the
@@ -179,12 +197,31 @@ export function genLevel(o: GenOpts): LevelDef {
             [cx(gc[0]), cz(gc[1])],
             [cx(px), cz(py)],
           ];
+    const k = GUARD_CLASSES[Math.floor(rand() * GUARD_CLASSES.length)];
     guards.push({
       path,
-      speed: 2.1 + rand() * 0.5,
-      range: 8,
-      type: rand() < 0.5 ? 'radial' : 'line',
+      speed: k.speed + rand() * 0.3,
+      range: k.range,
+      type: k.type,
+      hp: k.hp,
+      scale: k.scale,
+      tint: k.tint,
+      cls: k.cls,
     });
+  }
+
+  // scatter crate obstacles in open cells (cover + blocks sight; not on spawn /
+  // exit / a guard post). Small enough to squeeze past in a corridor.
+  const covers: Rect[] = [];
+  const nCrates = Math.floor(open.length * 0.16);
+  const cSize = cell * 0.5;
+  for (let i = 0; i < nCrates; i++) {
+    const c = open[Math.floor(rand() * open.length)];
+    if (used.has(c[0] + ',' + c[1])) continue; // avoid guard posts
+    if (Math.abs(c[0] - sc[0]) + Math.abs(c[1] - sc[1]) <= SAFE + 1) continue; // not in spawn
+    if (c[0] === ec[0] && c[1] === ec[1]) continue; // not on the exit
+    used.add(c[0] + ',' + c[1]);
+    covers.push({ x: cx(c[0]), z: cz(c[1]), w: cSize, d: cSize });
   }
 
   return {
@@ -196,7 +233,7 @@ export function genLevel(o: GenOpts): LevelDef {
     spawn,
     extract,
     walls,
-    covers: [],
+    covers,
     films: [],
     items: [],
     guards,
