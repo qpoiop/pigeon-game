@@ -1803,6 +1803,14 @@ export class PigeonGame {
     }
     return false;
   }
+
+  /** Distance forward (along `facing`) until a wall blocks — used to clip the vision cone. */
+  private wallDist(x: number, z: number, facing: number, max: number): number {
+    const sx = Math.sin(facing);
+    const sz = Math.cos(facing);
+    for (let d = 0.4; d < max; d += 0.4) if (this.inWall(x + sx * d, z + sz * d, 0)) return d;
+    return max;
+  }
   private los(ax: number, az: number, bx: number, bz: number): boolean {
     const dx = bx - ax;
     const dz = bz - az;
@@ -2195,6 +2203,9 @@ export class PigeonGame {
               G.model.group.rotation.y = G.facing;
               animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false });
               (G.cone.material as THREE.MeshBasicMaterial).opacity = 0.25;
+              G.cone.scale.setScalar(
+                Math.max(0.06, this.wallDist(G.pos.x, G.pos.y, G.facing, G.range) / G.range),
+              );
               maxDetect = 1;
               threatW = 2;
               threatX = G.pos.x;
@@ -2337,21 +2348,24 @@ export class PigeonGame {
               }
             } else {
               const tp = G.path[(G.seg + 1) % G.path.length];
-              const pdx = tp[0] - G.pos.x;
-              const pdz = tp[1] - G.pos.y;
-              const pd = Math.hypot(pdx, pdz);
-              if (pd < 0.15) G.seg = (G.seg + 1) % G.path.length;
+              const pd = Math.hypot(tp[0] - G.pos.x, tp[1] - G.pos.y);
+              if (pd < 0.4) G.seg = (G.seg + 1) % G.path.length;
               else {
-                G.pos.x += (pdx / pd) * G.speed * dt;
-                G.pos.y += (pdz / pd) * G.speed * dt;
-                const wantG = Math.atan2(pdx, pdz);
-                let dg = wantG - G.facing;
+                // route around walls (A*) toward the waypoint instead of a straight
+                // line, so patrols don't jam against cover
+                const wp = this.guardWaypoint(G, tp[0], tp[1], dt);
+                const mdx = wp.x - G.pos.x;
+                const mdz = wp.z - G.pos.y;
+                const md = Math.hypot(mdx, mdz) || 1;
+                G.pos.x += (mdx / md) * G.speed * dt;
+                G.pos.y += (mdz / md) * G.speed * dt;
+                let dg = Math.atan2(mdx, mdz) - G.facing;
                 while (dg > Math.PI) dg -= Math.PI * 2;
                 while (dg < -Math.PI) dg += Math.PI * 2;
                 G.facing += dg * Math.min(1, dt * 6);
                 gSpeed = G.speed;
               }
-              this.collide(G.pos, 0.55); // patrol was the one branch that let guards clip walls
+              this.collide(G.pos, 0.55);
             }
             // detection (also while lured)
             const vdx = P.pos.x - G.pos.x;
@@ -2427,6 +2441,10 @@ export class PigeonGame {
           }
           (G.cone.material as THREE.MeshBasicMaterial).opacity =
             0.08 + G.detect * 0.18 + (G.state === 'chase' ? 0.14 : 0);
+          // clip the cone at the nearest wall ahead so it doesn't show through cover
+          G.cone.scale.setScalar(
+            Math.max(0.06, this.wallDist(G.pos.x, G.pos.y, G.facing, G.range) / G.range),
+          );
           G.model.group.position.set(G.pos.x, 0, G.pos.y);
           G.model.group.rotation.y = G.facing;
           // guards lock their gaze onto the player once they notice something
@@ -2609,6 +2627,9 @@ export class PigeonGame {
       G.detect = s.d;
       (G.cone.material as THREE.MeshBasicMaterial).opacity =
         0.08 + G.detect * 0.18 + (G.state === 'chase' ? 0.14 : 0);
+      G.cone.scale.setScalar(
+        Math.max(0.06, this.wallDist(G.pos.x, G.pos.y, G.facing, G.range) / G.range),
+      );
       G.bang.visible = G.state === 'chase';
       G.model.group.position.set(G.pos.x, 0, G.pos.y);
       G.model.group.rotation.y = G.facing;
