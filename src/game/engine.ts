@@ -63,8 +63,6 @@ export class PigeonGame {
   private levelGroup!: THREE.Group;
   private actorGroup!: THREE.Group;
   private fxGroup!: THREE.Group;
-  private raycaster!: THREE.Raycaster;
-  private groundPlane!: THREE.Plane;
 
   private player!: Player;
   private peersMeshes: Record<string, PeerMesh> = {};
@@ -241,8 +239,6 @@ export class PigeonGame {
     this.resizeObs.observe(this.host);
     this.resize();
 
-    this.raycaster = new THREE.Raycaster();
-    this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   }
 
   private spawnPlayer(): void {
@@ -733,58 +729,44 @@ export class PigeonGame {
     window.addEventListener('keyup', this.onKeyUp);
 
     const canvas = this.$<HTMLCanvasElement>('.pg-canvas');
+    // dynamic joystick: press ANYWHERE on the field and drag to steer. The press
+    // point is the anchor; the drag offset from it is the movement vector.
+    let joyId: number | null = null;
+    let ax = 0;
+    let ay = 0;
     canvas.addEventListener('pointerdown', (e) => {
       if (this.mode !== 'play') return;
       this.sfx.ensure();
-      const rect = canvas.getBoundingClientRect();
-      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      this.raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
-      const pt = new THREE.Vector3();
-      if (this.raycaster.ray.intersectPlane(this.groundPlane, pt)) {
-        this.moveTarget = new THREE.Vector2(pt.x, pt.z);
-        this.burst(pt.x, pt.z, ACCENT, 4); // confirm exactly where the tap landed
+      joyId = e.pointerId;
+      ax = e.clientX;
+      ay = e.clientY;
+      this.joy.set(0, 0);
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* capture unsupported */
       }
     });
-
-    const stick = this.$<HTMLElement>('.pg-stick');
-    const knob = this.$<HTMLElement>('.pg-knob');
-    let stickId: number | null = null;
-    const setKnob = (dx: number, dy: number) => {
-      knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-    };
-    const moveStick = (e: PointerEvent) => {
-      const r = stick.getBoundingClientRect();
-      let dx = e.clientX - (r.left + r.width / 2);
-      let dy = e.clientY - (r.top + r.height / 2);
-      const len = Math.hypot(dx, dy);
-      const max = r.width / 2 - 10;
-      if (len > max) {
-        dx *= max / len;
-        dy *= max / len;
+    canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== joyId) return;
+      const max = 56; // px drag for full tilt
+      let jx = (e.clientX - ax) / max;
+      let jy = (e.clientY - ay) / max;
+      const l = Math.hypot(jx, jy);
+      if (l > 1) {
+        jx /= l;
+        jy /= l;
       }
-      setKnob(dx, dy);
-      this.joy.set(dx / max, dy / max);
-      this.moveTarget = null;
-      this.sfx.ensure();
-    };
-    stick.addEventListener('pointerdown', (e) => {
-      stickId = e.pointerId;
-      stick.setPointerCapture(stickId);
-      moveStick(e);
+      this.joy.set(jx, jy);
     });
-    stick.addEventListener('pointermove', (e) => {
-      if (e.pointerId === stickId) moveStick(e);
-    });
-    const endStick = (e: PointerEvent) => {
-      if (e.pointerId === stickId) {
-        stickId = null;
+    const endJoy = (e: PointerEvent) => {
+      if (e.pointerId === joyId) {
+        joyId = null;
         this.joy.set(0, 0);
-        setKnob(0, 0);
       }
     };
-    stick.addEventListener('pointerup', endStick);
-    stick.addEventListener('pointercancel', endStick);
+    canvas.addEventListener('pointerup', endJoy);
+    canvas.addEventListener('pointercancel', endJoy);
 
     this.$('.pg-b-attack').addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -1527,8 +1509,9 @@ export class PigeonGame {
         if (braceOn) (P.braceShell.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.sin(t * 10) * 0.1;
       }
       if (this.mode === 'play') {
-        const skReady = t - P.skillT >= CHARS[this.charId].skill.cd;
-        this.$<HTMLElement>('.pg-b-skill').style.opacity = skReady ? '1' : '0.4';
+        const skcd = CHARS[this.charId].skill.cd;
+        const rem = Math.max(0, skcd - (t - P.skillT));
+        this.$<HTMLElement>('.pg-cd').style.height = (rem / skcd) * 100 + '%';
       }
       for (let pI = this.parts.length - 1; pI >= 0; pI--) {
         const pp = this.parts[pI];
