@@ -28,10 +28,9 @@ export const TPL =
   ' </div>' +
   ' <div class="pg-abilities">' +
   '  <div class="pg-actions">' +
-  '   <button class="pg-slot pg-b-dash"><i class="k">⇧</i><i class="n">대시</i><i class="cd"></i></button>' +
-  '   <button class="pg-slot pg-b-crouch"><i class="k">C</i><i class="n">숨기</i><i class="cd"></i></button>' +
-  '   <button class="pg-slot pri pg-b-skill"><i class="n sk">스킬</i><i class="cd"></i></button>' +
-  '   <button class="pg-slot pri pg-b-attack"><i class="n">공격</i></button>' +
+  '   <button class="pg-slot pg-b-dash"><span class="n">대시</span><span class="cd"></span></button>' +
+  '   <button class="pg-slot pg-b-attack"><span class="n">공격</span></button>' +
+  '   <button class="pg-slot pg-b-skill"><span class="n sk">스킬</span><span class="cd"></span></button>' +
   '  </div>' +
   ' </div>' +
   ' <button class="pg-install">앱 설치 ↓</button>' +
@@ -73,23 +72,25 @@ export const CSS =
   // acquired-augment HUD strip (bottom-left)
   '.pg-augs{position:absolute;left:10px;bottom:12px;display:none;flex-direction:column;gap:4px;pointer-events:none;max-width:168px;z-index:9}' +
   '.pg-augs.show{display:flex}' +
-  '.pg-augs .ag{display:flex;align-items:center;gap:6px;background:rgba(243,242,242,.9);border-left:3px solid var(--c);padding:3px 8px;box-shadow:0 1px 4px rgba(0,0,0,.18)}' +
-  '.pg-augs .ag .ic{color:var(--c);font-size:12px;line-height:1}' +
+  '.pg-augs .ag{display:flex;align-items:center;gap:6px;background:rgba(243,242,242,.92);border:1.5px solid #201e1d;border-left:4px solid #ec3013;padding:3px 8px;box-shadow:0 1px 4px rgba(0,0,0,.18)}' +
+  '.pg-augs .ag .ic{color:#ec3013;font-size:12px;line-height:1}' +
   '.pg-augs .ag .nm{flex:1;white-space:nowrap;font:800 10px/1 inherit;letter-spacing:.02em;color:#201e1d}' +
   '.pg-augs .ag .pips{display:flex;gap:2px}' +
-  '.pg-augs .ag .pips i{width:5px;height:5px;border-radius:50%;background:rgba(32,30,29,.2)}' +
-  '.pg-augs .ag .pips i.on{background:var(--c)}' +
+  '.pg-augs .ag .pips i{width:5px;height:5px;background:rgba(32,30,29,.22)}' +
+  '.pg-augs .ag .pips i.on{background:#ec3013}' +
   // stage-clear augment cards
-  '.pg-cardhd{margin:8px 0;font:800 12px/1 inherit;letter-spacing:.1em;text-transform:uppercase;color:#ec3013;text-align:center}' +
-  '.pg-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}' +
-  '.pg-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 10px;border:2px solid var(--c);border-radius:8px;background:rgba(243,242,242,.7);cursor:pointer;color:#201e1d;text-align:center;overflow:hidden;transition:transform .1s,box-shadow .1s}' +
-  ".pg-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0,var(--c),transparent 70%);opacity:.16;pointer-events:none}" +
-  '.pg-card:hover,.pg-card:active{transform:translateY(-3px);box-shadow:0 5px 16px rgba(0,0,0,.28)}' +
-  '.pg-card .ic{font-size:30px;color:var(--c);line-height:1}' +
-  '.pg-card .nm{font:800 15px/1 inherit}' +
-  '.pg-card .lv{font:800 10px/1 inherit;letter-spacing:.1em;color:var(--c);text-transform:uppercase}' +
-  '.pg-card .ds{font:500 11px/1.35 inherit;color:#3c3937}' +
-  '@media(max-width:560px){.pg-cards{grid-template-columns:1fr}}' +
+  '.pg-cardhd{margin:10px 0 8px;font:800 12px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:#ec3013;text-align:center}' +
+  '.pg-cards{display:flex;flex-direction:column;gap:8px}' +
+  '.pg-card{display:flex;flex-direction:row;align-items:center;gap:12px;padding:11px 13px;border:2px solid #201e1d;background:#f3f2f2;cursor:pointer;color:#201e1d;text-align:left;transition:background .08s,color .08s}' +
+  '.pg-card:hover,.pg-card:active{background:#ec3013;color:#f3f2f2}' +
+  '.pg-card .ic{font-size:22px;color:#ec3013;width:26px;text-align:center;flex:none}' +
+  '.pg-card:hover .ic,.pg-card:active .ic{color:#f3f2f2}' +
+  '.pg-card .mid{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}' +
+  '.pg-card .nm{font:800 15px/1.1 inherit}' +
+  '.pg-card .ds{font:500 11px/1.3 inherit;color:#5a5755}' +
+  '.pg-card:hover .ds,.pg-card:active .ds{color:rgba(243,242,242,.85)}' +
+  '.pg-card .lv{font:800 11px/1 inherit;letter-spacing:.08em;color:#ec3013;flex:none;white-space:nowrap}' +
+  '.pg-card:hover .lv,.pg-card:active .lv{color:#f3f2f2}' +
   '.pg-bosshp{position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(440px,74%);display:none;text-align:center;pointer-events:none}' +
   '.pg-bosshp.show{display:block}' +
   '.pg-bosshp .l{font:800 10px/1 inherit;letter-spacing:.2em;color:#ec3013;text-transform:uppercase}' +
@@ -128,18 +129,15 @@ export const CSS =
   /* touch */
   /* ability bar (Duckov-style slots with cooldown sweeps) */
   '.pg-abilities{position:absolute;bottom:16px;right:14px;display:flex;flex-direction:column;align-items:flex-end;z-index:10;pointer-events:auto}' +
-  '.pg-actions{display:grid;grid-template-columns:repeat(2,72px);grid-auto-rows:72px;gap:9px}' +
-  '.pg-slot{position:relative;overflow:hidden;width:72px;height:72px;border:2px solid #201e1d;background:rgba(243,242,242,.85);color:#201e1d;padding:0;cursor:pointer;border-radius:4px}' +
-  '.pg-slot.pri{border-color:#ec3013;border-width:3px}' +
+  '.pg-actions{display:flex;gap:10px;align-items:flex-end}' +
+  '.pg-slot{position:relative;overflow:hidden;width:76px;height:76px;border:2px solid #201e1d;background:rgba(243,242,242,.9);color:#201e1d;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}' +
+  '.pg-slot.pg-b-skill{background:#ec3013;color:#f3f2f2}' +
   '.pg-slot.aim{background:#e0a021;color:#201e1d}' +
-  '.pg-slot:active{background:#ec3013;color:#f3f2f2;border-color:#ec3013}' +
-  '.pg-slot.onn{background:#201e1d;color:#f3f2f2}' +
-  '.pg-slot.dim{opacity:.4}' +
-  '.pg-slot .k{position:absolute;top:2px;left:4px;font:700 8px/1 inherit;letter-spacing:.04em;color:#8a8683;font-style:normal}' +
-  '.pg-slot.onn .k{color:#c9c6c3}' +
-  '.pg-slot .n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font:800 16px/1.1 inherit;letter-spacing:.01em;font-style:normal;white-space:nowrap}' +
-  '.pg-slot.pri .n{font-size:18px}' +
-  '.pg-slot .cd{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;font:800 22px/1 inherit;color:#201e1d;background:transparent}' +
+  '.pg-slot:active{transform:translateY(1px)}' +
+  '.pg-slot.dim{opacity:.45}' +
+  '.pg-slot .n{font:800 15px/1.15 inherit;letter-spacing:.02em;text-align:center;white-space:nowrap;padding:0 4px}' +
+  '.pg-slot .cd{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 24px/1 inherit;color:#201e1d;pointer-events:none}' +
+  '.pg-slot.pg-b-skill .cd{color:#f3f2f2}' +
   /* overlay */
   '.pg-install{position:absolute;top:10px;right:12px;z-index:50;display:none;border:2px solid #ec3013;background:#ec3013;color:#f3f2f2;font:800 12px/1 inherit;letter-spacing:.08em;padding:9px 13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}' +
   '.pg-install.show{display:block}' +
@@ -200,4 +198,6 @@ export const CSS =
   '@media(max-width:760px),(max-height:520px){.pg-topbar{overflow:hidden}.pg-topbar>div,.pg-tbtn{padding:8px 8px;font-size:10px;letter-spacing:.05em;gap:5px;white-space:nowrap}.pg-objective{display:none}.pg-chars{grid-template-columns:1fr}.pg-roster{top:48px}.pg-map{transform:scale(.85);transform-origin:top left}}' +
   // very narrow / very short: drop non-essential topbar items and keep each on one
   // line so it never overflows. (>.pg-* prefixes outrank the base `.pg-topbar>div`.)
-  '@media(max-width:520px),(max-height:430px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px;white-space:nowrap}.pg-brand{font-size:11px;letter-spacing:.08em}.pg-brand::before{width:6px;height:6px;margin-right:5px}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}';
+  '@media(max-width:520px),(max-height:430px){.pg-topbar>div,.pg-tbtn{padding:7px 7px;font-size:9px;letter-spacing:.02em;gap:4px;white-space:nowrap}.pg-brand{font-size:11px;letter-spacing:.08em}.pg-brand::before{width:6px;height:6px;margin-right:5px}.pg-topbar>.pg-stage,.pg-topbar>.pg-inv{display:none}.pg-topbar>.pg-net{max-width:40vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}}' +
+  // portrait: the HUD reads small on tall screens — scale the key areas up
+  '@media(orientation:portrait){.pg-map{transform:scale(1.3);transform-origin:top left}.pg-slot{width:84px;height:84px}.pg-slot .n{font-size:16px}.pg-hp{top:96px}.pg-hp-track{width:124px;height:9px}.pg-hp-n{font-size:11px}.pg-hp-ic{font-size:11px}.pg-augs .ag{padding:5px 9px}.pg-augs .ag .nm{font-size:11px}.pg-roster .pr{font-size:12px;padding:5px 9px}}';

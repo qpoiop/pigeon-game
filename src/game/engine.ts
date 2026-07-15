@@ -89,7 +89,6 @@ export class PigeonGame {
   private swipe!: THREE.Mesh;
   private swipeT = 0;
   private hurtFxUntil = 0;
-  private crouchT = -100;
   /** Acquired augment levels this run (reset at the title). */
   private aug: Partial<Record<AugId, number>> = {};
   /** Live 비둘기똥 orbiters circling the player. */
@@ -449,27 +448,9 @@ export class PigeonGame {
     // Guard navigation grid, built from the interior walls (radius-inflated).
     this.nav = new NavGrid(L.w / 2, L.d / 2, this.walls, 1, 0.55);
 
-    for (let f = 0; f < L.films.length; f++) {
-      const fp = L.films[f];
-      const fg = new THREE.Group();
-      const core = new THREE.Mesh(
-        new THREE.OctahedronGeometry(0.28),
-        new THREE.MeshLambertMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.35 }),
-      );
-      core.position.y = 0.8;
-      core.castShadow = true;
-      fg.add(core);
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(0.5, 0.03, 8, 32),
-        new THREE.MeshBasicMaterial({ color: ACCENT }),
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.06;
-      fg.add(ring);
-      fg.position.set(fp[0], 0, fp[1]);
-      this.levelGroup.add(fg);
-      this.films.push({ x: fp[0], z: fp[1], mesh: fg, core, got: false });
-    }
+    // films removed: the clear objective is now "defeat every guard, exit door".
+    // this.films stays empty (loops over it become no-ops); the HUD counter shows
+    // the remaining enemy count instead (see updFilms).
 
     for (const id of L.items) {
       const ig = new THREE.Group();
@@ -705,7 +686,6 @@ export class PigeonGame {
     this.player.facing = Math.PI;
     this.player.crouch = false;
     this.player.smokeUntil = 0;
-    this.$('.pg-b-crouch').classList.remove('onn');
     this.moveTarget = null;
     this.filmCount = 0;
     this.stageTime = 0;
@@ -727,7 +707,13 @@ export class PigeonGame {
 
   /* ---------- HUD updates ---------- */
   private updFilms(): void {
-    this.$('.pg-films').innerHTML = '필름 <b>' + this.filmCount + '</b>/' + this.level.films.length;
+    // repurposed: show how many enemies are left (clear = wipe them all)
+    if (this.boss) {
+      this.$('.pg-films').innerHTML = '보스전';
+      return;
+    }
+    const alive = this.guards.reduce((n, g) => n + (g.down ? 0 : 1), 0);
+    this.$('.pg-films').innerHTML = '적 <b>' + alive + '</b>';
   }
   private toast(msg: string): void {
     const el = this.$('.pg-toast');
@@ -924,7 +910,6 @@ export class PigeonGame {
       }
       if (this.mode !== 'play') return;
       this.keys[e.code] = true;
-      if (e.code === 'KeyC' || e.code === 'ControlLeft') this.toggleCrouch();
       if (e.code === 'ShiftLeft' || e.code === 'Space') {
         this.dash();
         e.preventDefault();
@@ -1017,31 +1002,8 @@ export class PigeonGame {
       e.preventDefault();
       this.dash();
     });
-    this.$('.pg-b-crouch').addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.toggleCrouch();
-    });
   }
 
-  private static readonly CROUCH_CD = 4.5;
-  private toggleCrouch(): void {
-    if (this.mode !== 'play' || this.player.downed) return;
-    const now = performance.now() / 1000;
-    if (this.player.crouch) {
-      // standing up is always allowed; the cooldown runs from when you stand
-      this.player.crouch = false;
-      this.crouchT = now;
-    } else {
-      if (now - this.crouchT < PigeonGame.CROUCH_CD) {
-        this.toast('숨기 재사용 대기 중');
-        return;
-      }
-      this.player.crouch = true;
-    }
-    this.$('.pg-b-crouch').classList.toggle('onn', this.player.crouch);
-    this.sfx.ensure();
-    this.sfx.ui();
-  }
   private dash(): void {
     if (this.mode !== 'play' || this.player.downed) return;
     const now = performance.now() / 1000;
@@ -1407,9 +1369,7 @@ export class PigeonGame {
       let pips = '';
       for (let i = 0; i < a.max; i++) pips += '<i' + (i < lv ? ' class="on"' : '') + '></i>';
       h +=
-        '<div class="ag" style="--c:#' +
-        a.color.toString(16).padStart(6, '0') +
-        '"><span class="ic">' +
+        '<div class="ag"><span class="ic">' +
         a.icon +
         '</span><span class="nm">' +
         a.name +
@@ -1432,10 +1392,13 @@ export class PigeonGame {
     G.bang.visible = false;
     G.cone.visible = false;
     G.tele.visible = false;
+    G.qmark.visible = false;
+    this.hideZone(G); // clear a half-filled attack gauge so it doesn't linger
     G.hpbar.visible = false;
     G.model.group.rotation.z = Math.PI / 2;
     G.model.group.position.y = 0.15;
     this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
+    this.updFilms(); // refresh the "enemies remaining" counter
     this.sfx.pickup();
   }
 
@@ -1574,17 +1537,9 @@ export class PigeonGame {
         el.textContent = '';
       }
     };
-    slot('.pg-b-skill', P.skillT, C.skill.cd);
+    slot('.pg-b-skill', P.skillT, this.skillCd());
     slot('.pg-b-dash', this.dashT, C.dashCd);
     this.$('.pg-b-attack').classList.toggle('dim', t - P.atkT < C.combat.atkCd);
-    // crouch shows its reuse cooldown only while standing
-    if (P.crouch) {
-      const cr = this.$<HTMLElement>('.pg-b-crouch .cd');
-      cr.style.background = 'transparent';
-      cr.textContent = '';
-    } else {
-      slot('.pg-b-crouch', this.crouchT, PigeonGame.CROUCH_CD);
-    }
   }
 
   /* ---------- Boss ---------- */
@@ -2086,18 +2041,16 @@ export class PigeonGame {
         cards +=
           '<button class="pg-card" data-a="' +
           id +
-          '" style="--c:#' +
-          a.color.toString(16).padStart(6, '0') +
           '"><span class="ic">' +
           a.icon +
-          '</span><span class="nm">' +
+          '</span><span class="mid"><span class="nm">' +
           a.name +
-          '</span><span class="lv">Lv.' +
-          lv +
-          ' / ' +
-          a.max +
           '</span><span class="ds">' +
           a.desc +
+          '</span></span><span class="lv">Lv.' +
+          lv +
+          '/' +
+          a.max +
           '</span></button>';
       }
       cards += '</div>';
@@ -2457,7 +2410,7 @@ export class PigeonGame {
         // opens once the last guard falls). Boss stages win on boss HP instead.
         const ex = this.level.extract;
         const inExit = (ax: number, az: number) =>
-          Math.abs(ax - ex[0]) < ex[2] / 2 + 0.6 && Math.abs(az - ex[1]) < ex[3] / 2 + 0.6;
+          Math.abs(ax - ex[0]) < ex[2] / 2 && Math.abs(az - ex[1]) < ex[3] / 2;
         if (!this.boss) {
           let alive = 0;
           for (const g of this.guards) if (!g.down) alive++;
