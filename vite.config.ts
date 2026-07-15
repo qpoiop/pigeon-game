@@ -22,7 +22,8 @@ export default defineConfig({
         theme_color: '#f3f2f2',
         background_color: '#14110f',
         display: 'standalone',
-        orientation: 'landscape',
+        // free rotation — don't lock the installed app to one orientation
+        orientation: 'any',
         start_url: './',
         scope: './',
         icons: [
