@@ -123,6 +123,7 @@ export class PigeonGame {
   // dash booster afterimages (fading silhouettes)
   private ghosts: { m: THREE.Mesh; t: number }[] = [];
   private lastGhost = 0;
+  private lastBump = 0;
   private rosterT = 0;
   private mapT = 0;
   private lax = 0;
@@ -1233,7 +1234,9 @@ export class PigeonGame {
     }
     return false;
   }
-  private collide(pos: THREE.Vector2, r: number): void {
+  /** Returns true if the actor was pushed out of a wall this call (for FX). */
+  private collide(pos: THREE.Vector2, r: number): boolean {
+    let hit = false;
     const hw = this.level.w / 2 - r;
     const hd = this.level.d / 2 - r;
     pos.x = Math.max(-hw, Math.min(hw, pos.x));
@@ -1257,8 +1260,10 @@ export class PigeonGame {
         else if (m === dR) pos.x = maxX;
         else if (m === dT) pos.y = minZ;
         else pos.y = maxZ;
+        hit = true;
       }
     }
+    return hit;
   }
 
   /**
@@ -1384,7 +1389,15 @@ export class PigeonGame {
         if (dashing) this.spawnGhost(P);
         P.pos.x += ix * maxSp * dt;
         P.pos.y += iz * maxSp * dt;
-        this.collide(P.pos, 0.5);
+        // wall bump: dust puff + micro shake when driving into a wall (throttled)
+        if (this.collide(P.pos, 0.5) && il > 0.3) {
+          const nowMs = performance.now();
+          if (nowMs - this.lastBump > 150) {
+            this.lastBump = nowMs;
+            this.burst(P.pos.x, P.pos.y, 0xb4b0ac, 4);
+            this.addShake(0.05 + (dashing ? 0.12 : 0));
+          }
+        }
         speed = il * maxSp;
         this.lax = ix * 2.4;
         this.laz = iz * 2.4;
