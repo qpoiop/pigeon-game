@@ -13,6 +13,7 @@ import { INK, BG, ACCENT, MID, PAPER } from '../data/palette';
 import { CHARS, CHAR_ORDER, type CharId } from '../data/characters';
 import { DIFFS, DIFF_ORDER, type DiffId } from '../data/difficulties';
 import { LEVELS, type LevelDef } from '../data/levels';
+import { genLevel, STAGE_GEN } from '../data/mapgen';
 import { AUGMENTS, poolFor, augDef, type AugId } from '../data/augments';
 import { Sfx } from './audio';
 import { Net } from './net';
@@ -360,7 +361,19 @@ export class PigeonGame {
 
   /* ---------- Level build ---------- */
   private buildLevel(idx: number): void {
-    const L = LEVELS[idx];
+    const base = LEVELS[idx];
+    // non-boss stages are generated as procedural corridor mazes (a fresh seed
+    // each play → variety); the boss arena stays hand-authored.
+    const L =
+      base.boss || !STAGE_GEN[idx]
+        ? base
+        : genLevel({
+            seed: (Math.random() * 0xffffffff) >>> 0,
+            ...STAGE_GEN[idx],
+            theme: base.theme ?? { ground: 0xe9e7e5, outer: 0xe2e0de, grid: 0xd8d5d3, wall: 0x201e1d },
+            name: base.name,
+            brief: '통로를 뚫고 적 경비를 전원 제압하라. 출구 문은 마지막 적이 쓰러지면 열린다.',
+          });
     this.level = L;
     this.stageIdx = idx;
     // free the previous stage's GPU resources before rebuilding
@@ -522,6 +535,17 @@ export class PigeonGame {
     exg.position.set(ex[0], 0, ex[1]);
     this.levelGroup.add(exg);
     this.extractMesh = exFill;
+    // spawn safe-zone marker (procedural maps keep guards out of this area)
+    if (!L.boss) {
+      const sr = 16;
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(sr - 0.5, sr, 56),
+        new THREE.MeshBasicMaterial({ color: 0x3fae6b, transparent: true, opacity: 0.28, side: THREE.DoubleSide }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(L.spawn[0], 0.03, L.spawn[1]);
+      this.levelGroup.add(ring);
+    }
 
     const D = DIFFS[this.diffId];
     for (let gI = 0; gI < L.guards.length; gI++) {
