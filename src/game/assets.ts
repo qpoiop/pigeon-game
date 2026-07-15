@@ -15,11 +15,22 @@ import type { Bird } from './types';
 import type { BirdKind } from '../data/characters';
 
 /**
- * Registry: BirdKind → .glb URL. Empty by design — drop a model in
- * `public/models/` and add an entry here to switch that species to 3D.
- * e.g. `pigeon: 'models/pigeon.glb'`.
+ * Registry: BirdKind → .glb URL. Drop a model in `public/` and add an entry
+ * here to switch that species to 3D. Relative to the app base (`./`).
  */
-export const MODELS: Partial<Record<BirdKind, string>> = {};
+export const MODELS: Partial<Record<BirdKind, string>> = {
+  pigeon: 'pigeon/pigeon.glb',
+};
+
+/**
+ * Per-model normalisation. A sourced mesh comes in at an arbitrary origin,
+ * scale and forward axis; we recentre it (feet on y=0, centred on x/z), scale
+ * to a common height, and rotate its forward to +Z so `group.rotation.y=facing`
+ * points it the right way. `yaw` is the fix-up if a model faces the wrong way.
+ */
+const NORM: Partial<Record<BirdKind, { height: number; yaw: number }>> = {
+  pigeon: { height: 1.35, yaw: 0 },
+};
 
 /** Draco decoder location. For offline/self-host, copy the decoder to public/draco/. */
 const DRACO_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
@@ -35,9 +46,76 @@ const REQUIRED = ['body', 'head', 'tail', 'wing_R', 'wing_L', 'foot_R', 'foot_L'
  * animBird only ever reads/writes `.position`, `.rotation` and `.scale`, which
  * exist on every Object3D, so the mesh-typed Bird fields are satisfied by casts.
  */
+/**
+ * Recentre + rescale + reorient a raw model in place, and swap its meshes onto
+ * the game's lit material (vertex colours preserved) with recomputed normals
+ * (simplification can drop them). Returns a container ready to parent/clone.
+ */
+function normalizeModel(root: THREE.Object3D, height: number, yaw: number): THREE.Group {
+  root.updateWorldMatrix(true, true);
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.geometry.computeVertexNormals();
+    const hasColor = !!m.geometry.getAttribute('color');
+    m.material = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: hasColor });
+    m.castShadow = false;
+    m.receiveShadow = false;
+  });
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const s = height / (size.y || 1);
+  // centre on x/z, drop feet to y=0 (offsets are pre-scale, in the wrap's space)
+  root.position.x -= center.x;
+  root.position.z -= center.z;
+  root.position.y -= box.min.y;
+  root.rotation.y += yaw; // fix forward axis → +Z
+  const wrap = new THREE.Group();
+  wrap.scale.setScalar(s);
+  wrap.add(root);
+  return wrap;
+}
+
+/**
+ * Wrap a rig-less model as a static `Bird`: the visible mesh lives directly on
+ * the group (which the engine positions + yaws), while the limb fields point at
+ * empty dummies so `animBird`'s per-limb writes are harmless no-ops. Result:
+ * the model slides + turns with the actor but doesn't flap (no skeleton).
+ */
+function buildStaticBird(model: THREE.Object3D): Bird {
+  const group = new THREE.Group();
+  group.add(model);
+  const dummy = () => {
+    const g = new THREE.Group();
+    group.add(g);
+    return g;
+  };
+  const body = dummy();
+  return {
+    group,
+    body: body as unknown as THREE.Mesh,
+    head: dummy(),
+    wings: [dummy() as unknown as THREE.Mesh, dummy() as unknown as THREE.Mesh],
+    feet: [dummy(), dummy()],
+    tail: dummy() as unknown as THREE.Mesh,
+    phase: 0,
+    idleT: 0,
+    baseHeadY: 0,
+    baseHeadZ: 0,
+    crouchBlend: 0,
+    leanX: 0,
+    leanZ: 0,
+    lookY: 0,
+    baseScaleY: 1,
+    baseScaleZ: 1,
+  };
+}
+
 export function buildBirdFromObject(root: THREE.Object3D): Bird | null {
   const find = (n: string) => root.getObjectByName(n);
-  for (const n of REQUIRED) if (!find(n)) return null;
+  // rig-less sourced model (single mesh) → static Bird (no procedural limbs)
+  if (REQUIRED.some((n) => !find(n))) return buildStaticBird(root);
   const body = find('body')!;
   const head = find('head')!;
   const tail = find('tail')!;
@@ -92,7 +170,9 @@ export async function preloadBirdModels(): Promise<void> {
   await Promise.all(
     (Object.keys(MODELS) as BirdKind[]).map(async (kind) => {
       try {
-        const root = await loadGLTF(MODELS[kind]!);
+        let root = await loadGLTF(MODELS[kind]!);
+        const nz = NORM[kind];
+        if (nz) root = normalizeModel(root, nz.height, nz.yaw);
         if (buildBirdFromObject(root)) templates.set(kind, root);
       } catch {
         /* leave uncached → procedural fallback */
@@ -110,4 +190,10 @@ export function birdModel(kind: BirdKind): Bird | null {
   const tpl = templates.get(kind);
   if (!tpl) return null;
   return buildBirdFromObject(tpl.clone(true));
+}
+
+/** A cloned, normalised model root for static display (e.g. the title hero). */
+export function heroModel(kind: BirdKind): THREE.Object3D | null {
+  const tpl = templates.get(kind);
+  return tpl ? tpl.clone(true) : null;
 }

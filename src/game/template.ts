@@ -115,7 +115,7 @@ export const CSS =
   /* overlay */
   '.pg-install{position:absolute;top:10px;right:12px;z-index:50;display:none;border:2px solid #ec3013;background:#ec3013;color:#f3f2f2;font:800 12px/1 inherit;letter-spacing:.08em;padding:9px 13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}' +
   '.pg-install.show{display:block}' +
-  '.pg-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(243,242,242,.94);overflow:auto;z-index:40}' +
+  '.pg-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(243,242,242,.86);overflow:auto;z-index:40}' +
   '.pg-overlay.show{display:flex}' +
   '.pg-panel{width:min(620px,92%);max-height:92%;overflow-y:auto;border:2px solid #201e1d;background:#f3f2f2;margin:16px 0}' +
   '.pg-panel .hd{border-bottom:2px solid #201e1d;padding:16px 22px;display:flex;align-items:baseline;gap:12px}' +

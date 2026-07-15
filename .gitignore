@@ -8,3 +8,6 @@ dist-ssr
 *.tsbuildinfo
 .DS_Store
 npm-debug.log*
+
+# raw 3D source dumps (too big for git / web) — kept locally, not served/bundled
+assets-src/

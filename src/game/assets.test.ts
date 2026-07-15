@@ -35,10 +35,17 @@ describe('glTF Path A node mapping', () => {
     expect(bird!.baseScaleZ).toBeCloseTo(1.25);
   });
 
-  it('returns null when a required node is missing (graceful fallback)', () => {
+  it('falls back to a static Bird when the rig contract is unmet', () => {
     const root = fakeModelRoot();
     root.getObjectByName('wing_L')!.name = 'oops';
-    expect(buildBirdFromObject(root)).toBeNull();
+    const bird = buildBirdFromObject(root);
+    // rig-less model → static Bird (visible mesh on the group, dummy limbs) so
+    // it still moves/turns with the actor; the engine no longer falls through.
+    expect(bird).not.toBeNull();
+    expect(bird!.group.children).toContain(root); // model parented to the group
+    expect(bird!.wings).toHaveLength(2);
+    // animBird's per-limb writes are harmless no-ops on the dummies
+    expect(() => animBird(bird!, { speed: 3, dt: 1 / 60, t: 1, crouch: false })).not.toThrow();
   });
 
   it('procedural animBird drives the mapped model without throwing', () => {

@@ -211,3 +211,10 @@ React는 마운트 대상 `<div>`를 만들어 엔진을 붙이고 언마운트 
 
 구현은 이 프로토타입을 픽셀 단위로 재현하되, 실제 배포·확장이 가능한 웹앱 구조로
 재구성한 것이다.
+
+## 크레딧 (3D 에셋)
+
+- 피존 모델: This work is based on ["Pigeon"](https://sketchfab.com/3d-models/pigeon-cc14e3b4eab54e21b1e1f665b249f63f)
+  by [kanevsky](https://sketchfab.com/kanevsky), licensed under
+  [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). 웹 배포용으로
+  디시메이션 + Draco 압축(149MB → 141KB). 원본은 `public/pigeon/license.txt` 참조.

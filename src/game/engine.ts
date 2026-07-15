@@ -191,7 +191,10 @@ export class PigeonGame {
     this.showTitle();
     // load any registered 3D bird models in the background; spawns before this
     // resolves (or when MODELS is empty) fall back to the procedural makeBird.
-    void preloadBirdModels();
+    // once loaded, re-spawn on the menu so the sourced model swaps in for its char.
+    void preloadBirdModels().then(() => {
+      if (this.mode === 'menu') this.spawnPlayer();
+    });
     this.loop();
   }
 
@@ -2341,6 +2344,7 @@ export class PigeonGame {
       }
       P.group.position.set(P.pos.x, 0, P.pos.y);
       P.group.rotation.y = P.facing;
+      if (this.mode === 'menu') P.group.rotation.y = t * 0.5; // title hero: slow showcase spin
       animBird(P, {
         speed,
         dt,
