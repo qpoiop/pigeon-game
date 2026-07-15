@@ -104,12 +104,13 @@ export function genLevel(o: GenOpts): LevelDef {
   const cx = (x: number) => x * cell - W / 2 + cell / 2;
   const cz = (y: number) => y * cell - D / 2 + cell / 2;
 
-  // emit interior wall cells, merging horizontal runs per row into fewer rects
+  // emit ALL wall cells (incl. the border ring) so the perimeter is solid wall,
+  // not an empty strip. Merge horizontal runs per row into fewer rects.
   const walls: Rect[] = [];
-  for (let y = 1; y < gh - 1; y++) {
+  for (let y = 0; y < gh; y++) {
     let run = 0;
-    for (let x = 1; x <= gw - 1; x++) {
-      const solid = x < gw - 1 && wall[y][x];
+    for (let x = 0; x <= gw; x++) {
+      const solid = x < gw && wall[y][x];
       if (solid) {
         run++;
       } else if (run) {
@@ -125,8 +126,8 @@ export function genLevel(o: GenOpts): LevelDef {
   const edX = ec[0] >= gw / 2 ? 1 : -1;
   const edZ = ec[1] >= gh / 2 ? 1 : -1;
   const extract: [number, number, number, number] = [
-    cx(ec[0]) + edX * cell * 0.55,
-    cz(ec[1]) + edZ * cell * 0.55,
+    cx(ec[0]) + edX * cell * 0.3,
+    cz(ec[1]) + edZ * cell * 0.3,
     cell * 0.9,
     cell * 0.9,
   ];
@@ -204,7 +205,7 @@ export function genLevel(o: GenOpts): LevelDef {
 
 /** Per-stage generation presets (index 0..2; the boss stage stays hand-authored). */
 export const STAGE_GEN: { gw: number; gh: number; cell: number; guards: number }[] = [
-  { gw: 13, gh: 9, cell: 4.5, guards: 6 },
-  { gw: 15, gh: 11, cell: 4.5, guards: 8 },
-  { gw: 17, gh: 13, cell: 4.5, guards: 10 },
+  { gw: 11, gh: 9, cell: 4, guards: 5 },
+  { gw: 13, gh: 11, cell: 4, guards: 7 },
+  { gw: 15, gh: 11, cell: 4, guards: 9 },
 ];

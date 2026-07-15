@@ -1919,7 +1919,27 @@ export class PigeonGame {
       this.sfx.startAmb();
       this.closeOverlay();
       this.mode = 'play';
+      if (this.boss) this.bossIntro();
     });
+  }
+
+  /** Dramatic boss entrance: banner + shake/zoom + a warning telegraph. */
+  private bossIntro(): void {
+    const b = this.boss;
+    if (!b) return;
+    const el = this.$<HTMLElement>('.pg-bossban');
+    el.innerHTML =
+      '<span class="k">WARNING</span><span class="t">적 사령관</span>' +
+      '<span class="d">스프레드 사격 · 돌진 · 슬램 — 위험 표시(텔레그래프)를 읽고 회피하며 제압하라</span>';
+    el.classList.remove('show');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('show');
+    this.addShake(0.5);
+    this.kickZoom(2.2);
+    this.freeze(0.12);
+    this.sfx.spotted();
+    this.burst(b.pos.x, b.pos.y, 0xec3013, 20);
+    window.setTimeout(() => el.classList.remove('show'), 2700);
   }
 
   private fail(): void {

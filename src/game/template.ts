@@ -21,6 +21,7 @@ export const TPL =
   '  <div class="pg-augs"></div>' +
   '  <div class="pg-objective"></div>' +
   '  <div class="pg-toast"></div>' +
+  '  <div class="pg-bossban"></div>' +
   ' </div>' +
   ' <div class="pg-drawer">' +
   '  <div class="pg-dr-hd"><span class="k">Mission file</span><button class="pg-dr-x">닫기 ✕</button></div>' +
@@ -69,6 +70,13 @@ export const CSS =
   '.pg-hp-n{font:800 10px/1 inherit;color:#201e1d;min-width:26px;letter-spacing:.02em}' +
   // full-screen red vignette that flashes when the player takes damage
   '.pg-hurt{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:35;box-shadow:inset 0 0 90px 20px rgba(236,48,19,.75);transition:opacity .05s linear}' +
+  // boss-entrance banner
+  '.pg-bossban{position:absolute;top:38%;left:0;right:0;z-index:36;display:none;flex-direction:column;align-items:center;gap:4px;pointer-events:none;text-align:center}' +
+  '.pg-bossban.show{display:flex;animation:pgboss 2.6s ease-out forwards}' +
+  '.pg-bossban .k{font:800 12px/1 inherit;letter-spacing:.4em;color:#ec3013}' +
+  '.pg-bossban .t{font:900 clamp(30px,7vw,56px)/1 inherit;letter-spacing:.02em;color:#f3f2f2;text-shadow:0 2px 12px rgba(0,0,0,.6),0 0 2px #ec3013;-webkit-text-stroke:1.5px #201e1d}' +
+  '.pg-bossban .d{font:700 12px/1.4 inherit;color:#f3f2f2;text-shadow:0 1px 4px rgba(0,0,0,.7);max-width:80%}' +
+  '@keyframes pgboss{0%{opacity:0;transform:scale(1.3)}12%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:scale(.96)}}' +
   // acquired-augment HUD strip (bottom-left)
   '.pg-augs{position:absolute;left:10px;bottom:12px;display:none;flex-direction:column;gap:4px;pointer-events:none;max-width:168px;z-index:9}' +
   '.pg-augs.show{display:flex}' +
