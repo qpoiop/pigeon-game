@@ -7,6 +7,8 @@ export interface Rect {
   z: number;
   w: number;
   d: number;
+  /** Optional wall height (m). Omit to let the engine vary it for a skyline. */
+  h?: number;
 }
 
 export interface ItemSpawn {

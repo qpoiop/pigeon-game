@@ -333,7 +333,9 @@ export class PigeonGame {
 
     this.walls = [];
     for (const wl of L.walls) {
-      bar(wl.x, wl.z, wl.w, wl.d, 1.7);
+      // vary height for a skyline (deterministic per position) unless authored
+      const wh = wl.h ?? 1.5 + ((Math.abs(Math.round(wl.x) * 31 + Math.round(wl.z) * 17)) % 4) * 0.5;
+      bar(wl.x, wl.z, wl.w, wl.d, wh);
       this.walls.push({
         minX: wl.x - wl.w / 2,
         maxX: wl.x + wl.w / 2,
@@ -1659,6 +1661,7 @@ export class PigeonGame {
                 G.facing += dg * Math.min(1, dt * 6);
                 gSpeed = G.speed;
               }
+              this.collide(G.pos, 0.55); // patrol was the one branch that let guards clip walls
             }
             // detection (also while lured)
             const vdx = P.pos.x - G.pos.x;
