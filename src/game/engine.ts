@@ -120,6 +120,9 @@ export class PigeonGame {
   private shakeAmp = 0;
   private hitStop = 0;
   private zoomKick = 0;
+  // dash booster afterimages (fading silhouettes)
+  private ghosts: { m: THREE.Mesh; t: number }[] = [];
+  private lastGhost = 0;
   private rosterT = 0;
   private mapT = 0;
   private lax = 0;
@@ -288,6 +291,7 @@ export class PigeonGame {
     // free the previous stage's GPU resources before rebuilding
     this.clearGroup(this.levelGroup);
     this.clearGroup(this.fxGroup);
+    this.ghosts = []; // fxGroup clear disposed the meshes; drop the stale refs
     this.guards = [];
     this.films = [];
     this.items = [];
@@ -827,6 +831,22 @@ export class PigeonGame {
     this.kickZoom(1.8);
   }
 
+  /** Dash booster afterimage: a fading, expanding silhouette left behind. */
+  private spawnGhost(P: Player): void {
+    const now = performance.now();
+    if (now - this.lastGhost < 26) return; // throttle so the count stays sane
+    this.lastGhost = now;
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 8, 6),
+      new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.42, depthWrite: false }),
+    );
+    m.scale.set(0.85, 0.8, 1.25);
+    m.position.set(P.pos.x, 0.62, P.pos.y);
+    m.rotation.y = P.facing;
+    this.fxGroup.add(m);
+    this.ghosts.push({ m, t: 0.32 });
+  }
+
   private useDecoy(): void {
     if (this.mode !== 'play') return;
     if (this.inv.decoy <= 0) {
@@ -1195,7 +1215,7 @@ export class PigeonGame {
     const dx = bx - ax;
     const dz = bz - az;
     const dist = Math.hypot(dx, dz);
-    const steps = Math.ceil(dist / 0.4);
+    const steps = Math.ceil(dist / 0.25);
     for (let i = 1; i < steps; i++) {
       const t = i / steps;
       if (this.inWall(ax + dx * t, az + dz * t, 0)) return false;
@@ -1214,15 +1234,24 @@ export class PigeonGame {
     pos.x = Math.max(-hw, Math.min(hw, pos.x));
     pos.y = Math.max(-hd, Math.min(hd, pos.y));
     for (const w of this.walls) {
-      const cx = Math.max(w.minX, Math.min(w.maxX, pos.x));
-      const cz = Math.max(w.minZ, Math.min(w.maxZ, pos.y));
-      const dx = pos.x - cx;
-      const dz = pos.y - cz;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < r * r) {
-        const d = Math.sqrt(d2) || 0.001;
-        pos.x = cx + (dx / d) * r;
-        pos.y = cz + (dz / d) * r;
+      // Minkowski-expanded AABB: grow the wall by the actor radius; if the point
+      // lands inside, push it out along the axis of least penetration. Unlike the
+      // old closest-point test this also resolves DEEP penetration (center inside
+      // the wall), which let thin walls / fast dashes / low-fps steps tunnel through.
+      const minX = w.minX - r;
+      const maxX = w.maxX + r;
+      const minZ = w.minZ - r;
+      const maxZ = w.maxZ + r;
+      if (pos.x > minX && pos.x < maxX && pos.y > minZ && pos.y < maxZ) {
+        const dL = pos.x - minX;
+        const dR = maxX - pos.x;
+        const dT = pos.y - minZ;
+        const dB = maxZ - pos.y;
+        const m = Math.min(dL, dR, dT, dB);
+        if (m === dL) pos.x = minX;
+        else if (m === dR) pos.x = maxX;
+        else if (m === dT) pos.y = minZ;
+        else pos.y = maxZ;
       }
     }
   }
@@ -1305,6 +1334,19 @@ export class PigeonGame {
           this.parts.splice(pI, 1);
         }
       }
+      // dash afterimages: fade + swell, then dispose
+      for (let gI = this.ghosts.length - 1; gI >= 0; gI--) {
+        const gh = this.ghosts[gI];
+        gh.t -= dt;
+        (gh.m.material as THREE.MeshBasicMaterial).opacity = 0.42 * Math.max(0, gh.t / 0.32);
+        gh.m.scale.multiplyScalar(1 + dt * 0.6);
+        if (gh.t <= 0) {
+          this.fxGroup.remove(gh.m);
+          (gh.m.material as THREE.Material).dispose();
+          gh.m.geometry.dispose();
+          this.ghosts.splice(gI, 1);
+        }
+      }
       if (this.mode !== 'play' && this.arrow) this.arrow.visible = false;
       if (this.mode === 'play') {
         this.stageTime += dt;
@@ -1331,8 +1373,10 @@ export class PigeonGame {
           ix /= il;
           iz /= il;
         }
-        const dashing = t - this.dashT < 0.22;
-        const maxSp = (P.crouch ? 2.1 : 4.4) * C.speed * (dashing ? 2.3 : 1);
+        const dashing = t - this.dashT < 0.32;
+        const maxSp = (P.crouch ? 2.1 : 4.4) * C.speed * (dashing ? 3.1 : 1);
+        // booster afterimages while dashing — spawn a fading silhouette each frame
+        if (dashing) this.spawnGhost(P);
         P.pos.x += ix * maxSp * dt;
         P.pos.y += iz * maxSp * dt;
         this.collide(P.pos, 0.5);
@@ -1725,7 +1769,7 @@ export class PigeonGame {
         t,
         crouch: P.crouch,
         turn: pTurn,
-        dash: clamp(1 - (t - this.dashT) / 0.35, 0, 1),
+        dash: clamp(1 - (t - this.dashT) / 0.45, 0, 1),
         lookYaw: pLook,
       });
       this.updatePeers();
