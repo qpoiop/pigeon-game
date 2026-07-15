@@ -176,7 +176,7 @@ export function genLevel(o: GenOpts): LevelDef {
 
 /** Per-stage generation presets (index 0..2; the boss stage stays hand-authored). */
 export const STAGE_GEN: { gw: number; gh: number; cell: number; guards: number }[] = [
-  { gw: 13, gh: 9, cell: 6.5, guards: 6 },
-  { gw: 15, gh: 11, cell: 6.5, guards: 8 },
-  { gw: 19, gh: 13, cell: 6.5, guards: 11 },
+  { gw: 13, gh: 9, cell: 4.5, guards: 6 },
+  { gw: 15, gh: 11, cell: 4.5, guards: 8 },
+  { gw: 17, gh: 13, cell: 4.5, guards: 10 },
 ];

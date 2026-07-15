@@ -537,7 +537,7 @@ export class PigeonGame {
     this.extractMesh = exFill;
     // spawn safe-zone marker (procedural maps keep guards out of this area)
     if (!L.boss) {
-      const sr = 16;
+      const sr = (STAGE_GEN[idx]?.cell ?? 4.5) * 2.7;
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(sr - 0.5, sr, 56),
         new THREE.MeshBasicMaterial({ color: 0x3fae6b, transparent: true, opacity: 0.28, side: THREE.DoubleSide }),
