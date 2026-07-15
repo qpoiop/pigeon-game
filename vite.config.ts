@@ -15,8 +15,8 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['favicon.svg', 'favicon-64.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'PIGEON PROTOCOL — 비둘기 특무',
-        short_name: 'Pigeon',
+        name: 'pigeonoid',
+        short_name: 'pigeonoid',
         description: '탑다운 3D 잠입 전략 게임. 전서구 요원이 되어 마이크로필름을 회수하고 탈출하라.',
         lang: 'ko',
         theme_color: '#f3f2f2',
