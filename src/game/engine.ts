@@ -36,6 +36,7 @@ import type {
   Particle,
   Player,
   PeerMesh,
+  Projectile,
   World,
 } from './types';
 
@@ -81,6 +82,7 @@ export class PigeonGame {
   private filmCount = 0;
   private extractT = 0;
   private parts: Particle[] = [];
+  private projectiles: Projectile[] = [];
   private arrow!: THREE.Group;
 
   // shared squad alarm — most recent known player location (for coordinated search)
@@ -251,6 +253,10 @@ export class PigeonGame {
     p.facing = old ? old.facing : 0;
     p.crouch = false;
     p.smokeUntil = 0;
+    p.maxHp = C.combat.hp;
+    p.hp = C.combat.hp;
+    p.hurtUntil = 0;
+    p.atkT = -10;
     if (old) {
       this.actorGroup.remove(old.group);
       disposeObject(old.group);
@@ -293,6 +299,7 @@ export class PigeonGame {
     this.clearGroup(this.levelGroup);
     this.clearGroup(this.fxGroup);
     this.ghosts = []; // fxGroup clear disposed the meshes; drop the stale refs
+    this.projectiles = [];
     this.guards = [];
     this.films = [];
     this.items = [];
@@ -491,11 +498,15 @@ export class PigeonGame {
         repathT: 0,
         goalX: 0,
         goalZ: 0,
+        down: false,
       });
     }
 
     // reset player
     this.player.pos.set(L.spawn[0], L.spawn[1]);
+    this.player.hp = this.player.maxHp;
+    this.player.hurtUntil = 0;
+    this.projectiles = [];
     this.player.facing = Math.PI;
     this.player.crouch = false;
     this.player.smokeUntil = 0;
@@ -514,6 +525,7 @@ export class PigeonGame {
     this.$('.pg-stage').textContent = L.name;
     this.updFilms();
     this.updInv();
+    this.updHp();
     this.$('.pg-objective').textContent = '목표 — 마이크로필름 회수 후 적색 구역으로 탈출';
     this.updDrawer();
   }
@@ -696,6 +708,7 @@ export class PigeonGame {
       }
       if (e.code === 'Digit1') this.useDecoy();
       if (e.code === 'Digit2') this.useSmoke();
+      if (e.code === 'KeyF' || e.code === 'KeyJ') this.attack();
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.code) >= 0) e.preventDefault();
       this.moveTarget = null;
     };
@@ -759,6 +772,10 @@ export class PigeonGame {
     stick.addEventListener('pointerup', endStick);
     stick.addEventListener('pointercancel', endStick);
 
+    this.$('.pg-b-attack').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.attack();
+    });
     this.$('.pg-b-dash').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.dash();
@@ -851,6 +868,103 @@ export class PigeonGame {
     m.rotation.y = P.facing;
     this.fxGroup.add(m);
     this.ghosts.push({ m, t: 0.32 });
+  }
+
+  /* ---------- Combat ---------- */
+
+  /** Player attack — melee arc (downs guards in front) or a ranged projectile. */
+  private attack(): void {
+    if (this.mode !== 'play') return;
+    const P = this.player;
+    const cb = CHARS[this.charId].combat;
+    const now = performance.now() / 1000;
+    if (now - P.atkT < cb.atkCd) return;
+    P.atkT = now;
+    this.sfx.ensure();
+    if (cb.atk === 'ranged') {
+      this.spawnProjectile(P.pos.x, P.pos.y, P.facing, cb.dmg, cb.projSpeed ?? 24, false);
+      this.addShake(0.07);
+      this.kickZoom(0.4);
+      this.sfx.dash();
+    } else {
+      let hit = false;
+      for (const G of this.guards) {
+        if (G.down) continue;
+        const dx = G.pos.x - P.pos.x;
+        const dz = G.pos.y - P.pos.y;
+        if (Math.hypot(dx, dz) > cb.range) continue;
+        let a = Math.atan2(dx, dz) - P.facing;
+        while (a > Math.PI) a -= Math.PI * 2;
+        while (a < -Math.PI) a += Math.PI * 2;
+        if (Math.abs(a) < 1.15) {
+          this.downGuard(G);
+          hit = true;
+        }
+      }
+      // strike puff in front of the player
+      this.burst(P.pos.x + Math.sin(P.facing) * cb.range * 0.6, P.pos.y + Math.cos(P.facing) * cb.range * 0.6, ACCENT, 6);
+      this.addShake(hit ? 0.2 : 0.09);
+      if (hit) this.freeze(0.05);
+      this.sfx.ui();
+    }
+  }
+
+  /** Spawn a travelling projectile. `enemy` shots hit the player; player shots hit guards. */
+  private spawnProjectile(x: number, z: number, facing: number, dmg: number, speed: number, enemy: boolean): void {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 8, 6),
+      new THREE.MeshBasicMaterial({ color: enemy ? ACCENT : 0x18a6c4 }),
+    );
+    m.position.set(x, 0.7, z);
+    this.fxGroup.add(m);
+    this.projectiles.push({
+      mesh: m,
+      x,
+      z,
+      vx: Math.sin(facing) * speed,
+      vz: Math.cos(facing) * speed,
+      life: 2.4,
+      dmg,
+      enemy,
+    });
+  }
+
+  /** Take a guard down: incapacitated, laid flat, no longer a threat. */
+  private downGuard(G: Guard): void {
+    if (G.down) return;
+    G.down = true;
+    G.state = 'patrol';
+    G.detect = 0;
+    G.bang.visible = false;
+    G.cone.visible = false;
+    G.model.group.rotation.z = Math.PI / 2;
+    G.model.group.position.y = 0.15;
+    this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
+    this.sfx.pickup();
+  }
+
+  /** Apply damage to the player (with a brief invulnerability window). */
+  private hurtPlayer(dmg: number): void {
+    const P = this.player;
+    const now = performance.now();
+    if (now < P.hurtUntil) return;
+    P.hurtUntil = now + 700;
+    P.hp -= dmg;
+    this.addShake(0.32);
+    this.freeze(0.06);
+    this.kickZoom(1.4);
+    this.sfx.spotted();
+    this.updHp();
+    if (P.hp <= 0) this.fail();
+  }
+
+  /** Redraw the HP pip bar. */
+  private updHp(): void {
+    const P = this.player;
+    if (!P) return;
+    let s = '';
+    for (let i = 0; i < P.maxHp; i++) s += i < P.hp ? '<i></i>' : '<i class="e"></i>';
+    this.$('.pg-hp').innerHTML = s;
   }
 
   private useDecoy(): void {
@@ -1008,6 +1122,7 @@ export class PigeonGame {
         '<ul class="pg-rules">' +
         '<li><b>이동</b><span>WASD / 화살표 · 바닥 클릭 · 모바일 조이스틱</span></li>' +
         '<li><b>숨기 (C)</b><span>느리지만 덜 띈다. 회색 은폐 구역에선 완전 은신</span></li>' +
+        '<li><b>공격 (F)</b><span>요원 성향에 따라 근접 타격 또는 원거리 사격. 경비 제압</span></li>' +
         '<li><b>대시 (Shift)</b><span>짧은 돌진</span></li>' +
         '<li><b>미끼 (1)</b><span>경비를 그 자리로 유인</span></li>' +
         '<li><b>연막 (2)</b><span>5초간 완전 은신</span></li>' +
@@ -1526,6 +1641,7 @@ export class PigeonGame {
         const searchers = this.guards.filter((g) => g.state === 'search');
         for (let gI = 0; gI < this.guards.length; gI++) {
           const G = this.guards[gI];
+          if (G.down) continue; // incapacitated guards are inert
           let gSpeed = 0;
           if (G.state === 'chase') {
             // chase whichever agent is nearest — host player or, on host, the guest
@@ -1553,7 +1669,8 @@ export class PigeonGame {
               gSpeed = sp;
             }
             this.collide(G.pos, 0.55);
-            if (cd < 0.95) this.fail();
+            // contact damages the player's HP (with i-frames) instead of instant fail
+            if (Math.hypot(P.pos.x - G.pos.x, P.pos.y - G.pos.y) < 0.95) this.hurtPlayer(1);
             const seeNow = !hidden && this.los(G.pos.x, G.pos.y, ctx, ctz) && cd < G.range * 1.5;
             if (seeNow) {
               G.loseT = 0;
@@ -1778,6 +1895,36 @@ export class PigeonGame {
           );
         }
         } // end host/solo simulation branch
+        // projectiles: advance, resolve hits (enemy->player, player->guards), expire
+        for (let prI = this.projectiles.length - 1; prI >= 0; prI--) {
+          const pr = this.projectiles[prI];
+          pr.life -= dt;
+          pr.x += pr.vx * dt;
+          pr.z += pr.vz * dt;
+          pr.mesh.position.set(pr.x, 0.7, pr.z);
+          let gone = pr.life <= 0 || this.inWall(pr.x, pr.z, 0);
+          if (!gone && pr.enemy) {
+            if (Math.hypot(pr.x - P.pos.x, pr.z - P.pos.y) < 0.6) {
+              this.hurtPlayer(pr.dmg);
+              gone = true;
+            }
+          } else if (!gone) {
+            for (const G of this.guards) {
+              if (G.down) continue;
+              if (Math.hypot(pr.x - G.pos.x, pr.z - G.pos.y) < 0.7) {
+                this.downGuard(G);
+                gone = true;
+                break;
+              }
+            }
+          }
+          if (gone) {
+            this.fxGroup.remove(pr.mesh);
+            (pr.mesh.material as THREE.Material).dispose();
+            pr.mesh.geometry.dispose();
+            this.projectiles.splice(prI, 1);
+          }
+        }
         this.net.send(P, this.stageIdx, this.charId);
       }
       P.group.position.set(P.pos.x, 0, P.pos.y);

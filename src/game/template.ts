@@ -14,6 +14,7 @@ export const TPL =
   '   <div class="pg-net">오프라인</div>' +
   '  </div>' +
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
+  '  <div class="pg-hp"></div>' +
   '  <canvas class="pg-map" width="150" height="100"></canvas>' +
   '  <div class="pg-roster"></div>' +
   '  <div class="pg-objective"></div>' +
@@ -26,7 +27,7 @@ export const TPL =
   ' <div class="pg-touch">' +
   '  <div class="pg-stick"><div class="pg-knob"></div></div>' +
   '  <div class="pg-btns">' +
-  '   <button class="pg-b pg-b-dash">대시</button><button class="pg-b pg-b-crouch">숨기</button>' +
+  '   <button class="pg-b pg-b-attack">공격</button><button class="pg-b pg-b-dash">대시</button><button class="pg-b pg-b-crouch">숨기</button>' +
   '   <button class="pg-b pg-b-decoy">미끼</button><button class="pg-b pg-b-smoke">연막</button>' +
   '  </div>' +
   ' </div>' +
@@ -54,6 +55,9 @@ export const CSS =
   '.pg-net.on{color:#ec3013;font-weight:700}' +
   '.pg-alertbar{position:absolute;top:40px;left:0;right:0;height:4px}' +
   '.pg-alertfill{height:100%;width:0%;background:#ec3013;transition:width .1s linear}' +
+  '.pg-hp{position:absolute;top:52px;left:50%;transform:translateX(-50%);display:flex;gap:3px;pointer-events:none}' +
+  '.pg-hp i{width:16px;height:8px;background:#ec3013;border:1px solid #201e1d;display:block}' +
+  '.pg-hp i.e{background:rgba(32,30,29,.12)}' +
   '.pg-map{position:absolute;top:56px;left:12px;border:2px solid #201e1d;background:#f3f2f2;opacity:.94}' +
   '.pg-roster{position:absolute;top:52px;right:12px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}' +
   '.pg-roster .pr{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:rgba(243,242,242,.88);border:1px solid #d8d5d3;padding:4px 8px;color:#3c3937}' +

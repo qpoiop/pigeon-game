@@ -47,6 +47,25 @@ export interface Player extends Bird {
   crouch: boolean;
   smokeUntil: number;
   smokeShell?: THREE.Mesh;
+  /** Combat: current / max hit points, and invulnerability window end (perf ms). */
+  hp: number;
+  maxHp: number;
+  hurtUntil: number;
+  /** Last time an attack was fired (s), for cooldown. */
+  atkT: number;
+}
+
+/** A player or enemy projectile travelling across the field. */
+export interface Projectile {
+  mesh: THREE.Mesh;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  life: number;
+  dmg: number;
+  /** True = fired by an enemy (hits player); false = player shot (hits guards). */
+  enemy: boolean;
 }
 
 export type GuardState = 'patrol' | 'chase' | 'lured' | 'search';
@@ -80,6 +99,8 @@ export interface Guard {
   /** Goal the cached route was built for (repath when it moves far). */
   goalX: number;
   goalZ: number;
+  /** Combat: taken down by the player (incapacitated, no longer a threat). */
+  down: boolean;
 }
 
 /** A short-lived debris cube thrown by pickups / dashes. */
