@@ -118,6 +118,21 @@ export class Net implements Signaler {
     }
   }
 
+  /** Cleanly leave the room: close the socket + drop peers/voice (frees the DO slot). */
+  disconnect(): void {
+    try {
+      this.ws?.close();
+    } catch {
+      /* noop */
+    }
+    this.ws = null;
+    this.status = 'off';
+    this.peers = {};
+    this.world = null;
+    for (const id in this.voice.pcs) this.voice.drop(id);
+    this.onStatus();
+  }
+
   signal(to: string, kind: SignalKind, data: unknown): void {
     if (!this.ws || this.ws.readyState !== 1) return;
     try {

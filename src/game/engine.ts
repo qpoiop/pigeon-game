@@ -826,6 +826,15 @@ export class PigeonGame {
     };
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    // close the relay socket when the tab is hidden/closed so the DO slot frees
+    // immediately instead of lingering as a zombie until TCP timeout
+    window.addEventListener('pagehide', () => {
+      try {
+        this.net.ws?.close();
+      } catch {
+        /* noop */
+      }
+    });
 
     const canvas = this.$<HTMLCanvasElement>('.pg-canvas');
     // dynamic joystick: press ANYWHERE on the field and drag to steer. The press
@@ -1418,6 +1427,8 @@ export class PigeonGame {
 
   private showTitle(): void {
     this.mode = 'menu';
+    this.paused = false;
+    this.net.disconnect(); // returning to title = leave the room (frees the DO slot)
     this.sfx.stopAmb();
     this.buildLevel(0);
     this.toggleDrawer(false);
