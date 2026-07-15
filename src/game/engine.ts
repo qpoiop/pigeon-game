@@ -481,6 +481,15 @@ export class PigeonGame {
       bang.position.y = 2.0;
       bang.visible = false;
       pg.group.add(bang);
+      // telegraph beam: a bar (along local Z) shown from the guard toward its
+      // target during windup — scaled/rotated per frame. Ascend-style warning.
+      const tele = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.05, 1),
+        new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.4, depthWrite: false }),
+      );
+      tele.visible = false;
+      this.fxGroup.add(tele);
+      const gtype = gd.type ?? 'patrol';
       this.guards.push({
         model: pg,
         cone,
@@ -506,6 +515,13 @@ export class PigeonGame {
         goalX: 0,
         goalZ: 0,
         down: false,
+        gtype,
+        atkCd: -100,
+        wind: 0,
+        lunge: 0,
+        lvx: 0,
+        lvz: 0,
+        tele,
       });
     }
 
@@ -986,8 +1002,11 @@ export class PigeonGame {
     G.down = true;
     G.state = 'patrol';
     G.detect = 0;
+    G.wind = 0;
+    G.lunge = 0;
     G.bang.visible = false;
     G.cone.visible = false;
+    G.tele.visible = false;
     G.model.group.rotation.z = Math.PI / 2;
     G.model.group.position.y = 0.15;
     this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
@@ -1710,6 +1729,72 @@ export class PigeonGame {
           const G = this.guards[gI];
           if (G.down) continue; // incapacitated guards are inert
           let gSpeed = 0;
+          // attacker types telegraph then strike once they've spotted the player
+          if (G.gtype !== 'patrol' && (G.state === 'chase' || G.wind > 0 || G.lunge > 0)) {
+            const adx = P.pos.x - G.pos.x;
+            const adz = P.pos.y - G.pos.y;
+            const adist = Math.hypot(adx, adz);
+            let handled = false;
+            if (G.lunge > 0) {
+              G.lunge -= dt;
+              G.pos.x += G.lvx * dt;
+              G.pos.y += G.lvz * dt;
+              this.collide(G.pos, 0.55);
+              if (adist < 1.0) this.hurtPlayer(2);
+              gSpeed = 14;
+              handled = true;
+            } else if (G.wind > 0) {
+              G.facing = Math.atan2(adx, adz);
+              G.wind -= dt;
+              const len = G.gtype === 'sniper' ? Math.min(adist, 22) : 6.5;
+              G.tele.visible = true;
+              G.tele.scale.set(G.gtype === 'sniper' ? 0.3 : 1.6, 1, len);
+              G.tele.rotation.y = G.facing;
+              G.tele.position.set(
+                G.pos.x + (Math.sin(G.facing) * len) / 2,
+                0.1,
+                G.pos.y + (Math.cos(G.facing) * len) / 2,
+              );
+              (G.tele.material as THREE.MeshBasicMaterial).opacity = 0.25 + 0.4 * Math.abs(Math.sin(t * 22));
+              if (G.wind <= 0) {
+                G.tele.visible = false;
+                if (G.gtype === 'sniper') {
+                  this.spawnProjectile(G.pos.x, G.pos.y, G.facing, 1, 15, true);
+                  this.sfx.alert();
+                } else {
+                  G.lunge = 0.32;
+                  G.lvx = Math.sin(G.facing) * 14;
+                  G.lvz = Math.cos(G.facing) * 14;
+                }
+                G.atkCd = t;
+              }
+              handled = true;
+            } else {
+              const cd = G.gtype === 'sniper' ? 2.3 : 1.9;
+              const inRange =
+                G.gtype === 'sniper'
+                  ? adist < 22 && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y)
+                  : adist < 7;
+              if (t - G.atkCd > cd && inRange) {
+                G.wind = G.gtype === 'sniper' ? 0.8 : 0.5;
+                G.facing = Math.atan2(adx, adz);
+                G.bang.visible = true;
+                handled = true;
+              }
+            }
+            if (handled) {
+              G.model.group.position.set(G.pos.x, 0, G.pos.y);
+              G.model.group.rotation.y = G.facing;
+              animBird(G.model, { speed: gSpeed, dt, t: t + gI * 3, crouch: false });
+              (G.cone.material as THREE.MeshBasicMaterial).opacity = 0.25;
+              maxDetect = 1;
+              threatW = 2;
+              threatX = G.pos.x;
+              threatZ = G.pos.y;
+              continue;
+            }
+            // not attacking this frame → fall through to normal chase (approach)
+          }
           if (G.state === 'chase') {
             // chase whichever agent is nearest — host player or, on host, the guest
             let ctx = P.pos.x;

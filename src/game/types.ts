@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CharId } from '../data/characters';
-import type { ItemType } from '../data/levels';
+import type { ItemType, GuardType } from '../data/levels';
 
 /** A rigged bird model plus the state its procedural animation needs. */
 export interface Bird {
@@ -107,6 +107,18 @@ export interface Guard {
   goalZ: number;
   /** Combat: taken down by the player (incapacitated, no longer a threat). */
   down: boolean;
+  /** Attacker behaviour. */
+  gtype: GuardType;
+  /** Last attack time (s) for cooldown. */
+  atkCd: number;
+  /** Telegraph windup remaining (s); >0 means winding up an attack. */
+  wind: number;
+  /** Lunge (charger) remaining (s) + its velocity. */
+  lunge: number;
+  lvx: number;
+  lvz: number;
+  /** Telegraph beam mesh (shown during windup). */
+  tele: THREE.Mesh;
 }
 
 /** A short-lived debris cube thrown by pickups / dashes. */
