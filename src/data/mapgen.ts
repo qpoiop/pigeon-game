@@ -67,8 +67,9 @@ export function genLevel(o: GenOpts): LevelDef {
     stack.push([nx, ny]);
   }
 
-  // a few extra openings so it's not all dead-ends (still only removes walls)
-  const loops = Math.floor(gw * gh * 0.05);
+  // a few extra openings so it's not all dead-ends (still only removes walls).
+  // kept low so the maze stays wall-dense rather than opening into rooms.
+  const loops = Math.floor(gw * gh * 0.015);
   for (let i = 0; i < loops; i++) {
     const x = 1 + Math.floor(rand() * (gw - 2));
     const y = 1 + Math.floor(rand() * (gh - 2));
@@ -77,7 +78,7 @@ export function genLevel(o: GenOpts): LevelDef {
 
   // spawn safe-zone: clear a ~3-cell radius around the spawn room corner
   const sc: [number, number] = [1, 1];
-  const SAFE = 3;
+  const SAFE = 2;
   for (let y = Math.max(1, sc[1] - SAFE); y <= Math.min(gh - 2, sc[1] + SAFE); y++)
     for (let x = Math.max(1, sc[0] - SAFE); x <= Math.min(gw - 2, sc[0] + SAFE); x++)
       wall[y][x] = false;
