@@ -35,6 +35,7 @@ import type {
   Item,
   Particle,
   Player,
+  Peer,
   PeerMesh,
   Projectile,
   Boss,
@@ -259,6 +260,7 @@ export class PigeonGame {
     p.atkT = -10;
     p.skillT = -100;
     p.braceUntil = 0;
+    p.downed = false;
     if (old) {
       this.actorGroup.remove(old.group);
       disposeObject(old.group);
@@ -556,12 +558,13 @@ export class PigeonGame {
       bring.position.y = 0.06;
       bring.visible = false;
       this.fxGroup.add(bring);
+      const bhp = Math.round(L.boss.hp * DIFFS[this.diffId].bhp);
       this.boss = {
         model: bm,
         pos: new THREE.Vector2(L.boss.x, L.boss.z),
         facing: Math.PI,
-        hp: L.boss.hp,
-        maxHp: L.boss.hp,
+        hp: bhp,
+        maxHp: bhp,
         phase: 0,
         pattern: 2,
         timer: 1.6,
@@ -581,6 +584,7 @@ export class PigeonGame {
     this.player.hurtUntil = 0;
     this.player.skillT = -100;
     this.player.braceUntil = 0;
+    this.player.downed = false; // revive at each stage
     this.projectiles = [];
     this.player.facing = Math.PI;
     this.player.crouch = false;
@@ -889,12 +893,14 @@ export class PigeonGame {
   }
 
   private toggleCrouch(): void {
+    if (this.mode !== 'play' || this.player.downed) return;
     this.player.crouch = !this.player.crouch;
     this.$('.pg-b-crouch').classList.toggle('onn', this.player.crouch);
     this.sfx.ensure();
     this.sfx.ui();
   }
   private dash(): void {
+    if (this.mode !== 'play' || this.player.downed) return;
     const now = performance.now() / 1000;
     if (now - this.dashT < CHARS[this.charId].dashCd) return;
     this.dashT = now;
@@ -965,7 +971,7 @@ export class PigeonGame {
 
   /** Player attack — melee arc (downs guards in front) or a ranged projectile. */
   private attack(): void {
-    if (this.mode !== 'play') return;
+    if (this.mode !== 'play' || this.player.downed) return;
     const P = this.player;
     const cb = CHARS[this.charId].combat;
     const now = performance.now() / 1000;
@@ -1046,7 +1052,7 @@ export class PigeonGame {
 
   /** Per-character active skill: brace (immunity) / blink (teleport-strike) / pierce shot. */
   private skill(): void {
-    if (this.mode !== 'play') return;
+    if (this.mode !== 'play' || this.player.downed) return;
     const P = this.player;
     const C = CHARS[this.charId];
     const now = performance.now() / 1000;
@@ -1107,15 +1113,40 @@ export class PigeonGame {
   private hurtPlayer(dmg: number): void {
     const P = this.player;
     const now = performance.now();
+    if (P.downed) return; // already incapacitated
     if (now < P.hurtUntil || now < P.braceUntil) return; // i-frames or brace immunity
     P.hurtUntil = now + 700;
-    P.hp -= dmg;
+    // all hurtPlayer callers are enemy sources → scale by difficulty
+    P.hp -= Math.max(1, Math.round(dmg * DIFFS[this.diffId].atk));
     this.addShake(0.32);
     this.freeze(0.06);
     this.kickZoom(1.4);
     this.sfx.spotted();
+    if (P.hp <= 0) {
+      P.hp = 0;
+      const peer = this.livePeer();
+      if (this.net.role() !== 'solo' && peer && peer.down !== 1) {
+        // co-op: go down instead of failing; revive when the team clears the stage
+        P.downed = true;
+        this.toast('쓰러졌다 — 동료가 구역을 클리어하면 부활한다');
+        this.addShake(0.4);
+      } else {
+        this.updHp();
+        this.fail();
+        return;
+      }
+    }
     this.updHp();
-    if (P.hp <= 0) this.fail();
+  }
+
+  /** A teammate seen within the last few seconds (co-op), else null. */
+  private livePeer(): Peer | null {
+    const now = performance.now();
+    for (const id in this.net.peers) {
+      const p = this.net.peers[id];
+      if (now - p.seen < 5000) return p;
+    }
+    return null;
   }
 
   /** Redraw the HP pip bar. */
@@ -1125,6 +1156,22 @@ export class PigeonGame {
     let s = '';
     for (let i = 0; i < P.maxHp; i++) s += i < P.hp ? '<i></i>' : '<i class="e"></i>';
     this.$('.pg-hp').innerHTML = s;
+  }
+
+  /** Co-op: teammate HP pips + downed marker. */
+  private updPeerHp(): void {
+    const peer = this.livePeer();
+    const el = this.$<HTMLElement>('.pg-peerhp');
+    if (!peer || !peer.mhp) {
+      el.classList.remove('show');
+      return;
+    }
+    el.classList.add('show');
+    el.classList.toggle('down', peer.down === 1);
+    let s = '<span class="l">' + (peer.name || '동료') + '</span>';
+    for (let i = 0; i < peer.mhp; i++) s += i < peer.hp ? '<i></i>' : '<i class="e"></i>';
+    if (peer.down === 1) s += '<span class="l" style="color:#ec3013;margin-left:4px">DOWN</span>';
+    el.innerHTML = s;
   }
 
   /** Ability-slot cooldown sweeps (attack / skill / dash), Duckov-style. */
@@ -1187,6 +1234,7 @@ export class PigeonGame {
     const pdz = P.pos.y - b.pos.y;
     const pdist = Math.hypot(pdx, pdz) || 0.001;
     const enrage = b.hp < b.maxHp * 0.4;
+    const wind = DIFFS[this.diffId].wind;
     const face = () => {
       let da = Math.atan2(pdx, pdz) - b.facing;
       while (da > Math.PI) da -= Math.PI * 2;
@@ -1205,7 +1253,7 @@ export class PigeonGame {
       if (b.timer <= 0) {
         b.pattern = (b.pattern + 1) % 3;
         b.phase = 1;
-        b.timer = (b.pattern === 0 ? 0.9 : b.pattern === 1 ? 0.7 : 1.0) * (enrage ? 0.7 : 1);
+        b.timer = (b.pattern === 0 ? 0.9 : b.pattern === 1 ? 0.7 : 1.0) * (enrage ? 0.7 : 1) * wind;
       }
     } else if (b.phase === 1) {
       face();
@@ -1266,7 +1314,7 @@ export class PigeonGame {
   }
 
   private useDecoy(): void {
-    if (this.mode !== 'play') return;
+    if (this.mode !== 'play' || this.player.downed) return;
     if (this.inv.decoy <= 0) {
       this.toast('미끼가 없다 — 맵에서 회수하라');
       return;
@@ -1302,7 +1350,7 @@ export class PigeonGame {
     this.toast('미끼 투척 — 경비가 유인된다');
   }
   private useSmoke(): void {
-    if (this.mode !== 'play') return;
+    if (this.mode !== 'play' || this.player.downed) return;
     if (this.inv.smoke <= 0) {
       this.toast('연막이 없다 — 맵에서 회수하라');
       return;
@@ -1823,7 +1871,10 @@ export class PigeonGame {
         P.braceShell.visible = braceOn;
         if (braceOn) (P.braceShell.material as THREE.MeshBasicMaterial).opacity = 0.22 + Math.sin(t * 10) * 0.1;
       }
-      if (this.mode === 'play') this.updAbilities(t);
+      if (this.mode === 'play') {
+        this.updAbilities(t);
+        this.updPeerHp();
+      }
       for (let pI = this.parts.length - 1; pI >= 0; pI--) {
         const pp = this.parts[pI];
         pp.t -= dt;
@@ -1870,6 +1921,10 @@ export class PigeonGame {
             ix = tdx / td;
             iz = tdz / td;
           }
+        }
+        if (P.downed) {
+          ix = 0;
+          iz = 0;
         }
         const il = Math.hypot(ix, iz);
         if (il > 1) {
@@ -1965,11 +2020,17 @@ export class PigeonGame {
           : 0.08;
         const inExit = (ax: number, az: number) =>
           Math.abs(ax - ex[0]) < ex[2] / 2 && Math.abs(az - ex[1]) < ex[3] / 2;
-        this.coHostEsc = ready && inExit(P.pos.x, P.pos.y) ? 1 : 0;
-        this.coGuestEsc = ready && gp && inExit(gp.x, gp.z) ? 1 : 0;
+        // downed teammates are carried: they count as "ready" without holding the exit,
+        // but at least one living agent must actually reach it to trigger extraction.
+        const guestDown = this.livePeer()?.down === 1;
+        this.coHostEsc = ready && (P.downed || inExit(P.pos.x, P.pos.y)) ? 1 : 0;
+        this.coGuestEsc = ready && gp && (guestDown || inExit(gp.x, gp.z)) ? 1 : 0;
+        const aliveInExit =
+          (!P.downed && inExit(P.pos.x, P.pos.y)) ||
+          (!!gp && !guestDown && inExit(gp.x, gp.z));
         if (this.boss) {
           /* boss stage: objective handled by boss HP, no extraction */
-        } else if (this.coHostEsc === 1 && (!gp || this.coGuestEsc === 1)) {
+        } else if (this.coHostEsc === 1 && (!gp || this.coGuestEsc === 1) && aliveInExit) {
           this.extractT += dt;
           const pct = Math.min(100, Math.round((this.extractT / 1.2) * 100));
           this.$('.pg-objective').textContent = (gp ? '동반 탈출 중… ' : '탈출 중… ') + pct + '%';
@@ -2071,7 +2132,7 @@ export class PigeonGame {
                   ? adist < 22 && this.los(G.pos.x, G.pos.y, P.pos.x, P.pos.y)
                   : adist < 7;
               if (t - G.atkCd > cd && inRange) {
-                G.wind = G.gtype === 'sniper' ? 0.8 : 0.5;
+                G.wind = (G.gtype === 'sniper' ? 0.8 : 0.5) * D.wind;
                 G.facing = Math.atan2(adx, adz);
                 G.bang.visible = true;
                 handled = true;

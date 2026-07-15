@@ -15,6 +15,7 @@ export const TPL =
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
   '  <div class="pg-hp"></div>' +
   '  <div class="pg-bosshp"><span class="l">적 사령관</span><div class="pg-bosshptrack"><div class="pg-bosshpfill"></div></div></div>' +
+  '  <div class="pg-peerhp"></div>' +
   '  <canvas class="pg-map" width="150" height="100"></canvas>' +
   '  <div class="pg-roster"></div>' +
   '  <div class="pg-objective"></div>' +
@@ -62,6 +63,12 @@ export const CSS =
   '.pg-bosshp .l{font:800 10px/1 inherit;letter-spacing:.2em;color:#ec3013;text-transform:uppercase}' +
   '.pg-bosshptrack{margin-top:3px;height:9px;border:2px solid #201e1d;background:rgba(32,30,29,.15)}' +
   '.pg-bosshpfill{height:100%;width:100%;background:#ec3013;transition:width .12s linear}' +
+  '.pg-peerhp{position:absolute;top:60px;left:50%;transform:translateX(-50%);display:none;gap:2px;align-items:center;pointer-events:none}' +
+  '.pg-peerhp.show{display:flex}' +
+  '.pg-peerhp .l{font:700 8px/1 inherit;letter-spacing:.1em;color:#18a6c4}' +
+  '.pg-peerhp i{width:11px;height:6px;background:#18a6c4;border:1px solid #201e1d;display:block}' +
+  '.pg-peerhp i.e{background:rgba(32,30,29,.12)}' +
+  '.pg-peerhp.down{opacity:.65}' +
   '.pg-map{position:absolute;top:40px;left:10px;border:2px solid #201e1d;background:#f3f2f2;opacity:.94}' +
   '.pg-roster{position:absolute;top:38px;right:10px;display:flex;flex-direction:column;gap:4px;align-items:flex-end}' +
   '.pg-roster .pr{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;background:rgba(243,242,242,.88);border:1px solid #d8d5d3;padding:4px 8px;color:#3c3937}' +

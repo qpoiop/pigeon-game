@@ -57,6 +57,8 @@ export interface Player extends Bird {
   /** Last time the active skill fired (s), and the brace-immunity end (perf ms). */
   skillT: number;
   braceUntil: number;
+  /** Co-op: incapacitated (HP 0 but a teammate is alive); revives next stage. */
+  downed: boolean;
 }
 
 /** Final-stage boss: HP + a small pattern state machine. */
@@ -199,6 +201,10 @@ export interface Peer {
   char: CharId;
   mic: number;
   seen: number;
+  /** Co-op combat: current / max HP and downed flag from the peer. */
+  hp: number;
+  mhp: number;
+  down: number;
 }
 
 export interface PeerMesh {

@@ -107,6 +107,9 @@ export class Net implements Signaler {
         p.crouch = m.c as number;
         p.char = (m.ch as CharId) || 'pigeon';
         p.mic = m.v as number;
+        p.hp = (m.hp as number) ?? 0;
+        p.mhp = (m.mhp as number) ?? 0;
+        p.down = (m.dn as number) ?? 0;
         p.seen = performance.now();
         this.voice.maybeConnect(id);
       };
@@ -145,6 +148,9 @@ export class Net implements Signaler {
           st: stage,
           ch: charId,
           v: this.voice.enabled && !this.voice.muted ? 1 : 0,
+          hp: player.hp,
+          mhp: player.maxHp,
+          dn: player.downed ? 1 : 0,
         }),
       );
     } catch {
