@@ -7,9 +7,8 @@ export const TPL =
   '   <div class="pg-stage"></div>' +
   '   <div class="pg-films"></div>' +
   '   <div class="pg-tbsp"><span class="pg-brand">pigeonoid</span></div>' +
-  '   <button class="pg-tbtn pg-mic">MIC 꺼짐</button>' +
   '   <button class="pg-tbtn pg-missionbtn">임무 (Tab)</button>' +
-  '   <button class="pg-tbtn pg-pausebtn">정지</button>' +
+  '   <button class="pg-tbtn pg-pausebtn">설정</button>' +
   '   <div class="pg-net">오프라인</div>' +
   '  </div>' +
   '  <div class="pg-alertbar"><div class="pg-alertfill"></div></div>' +
@@ -44,7 +43,7 @@ export const CSS =
   '.pg-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}' +
   '.pg-hud{position:absolute;inset:0;pointer-events:none}' +
   '.pg-topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:stretch;border-bottom:2px solid #201e1d;background:rgba(243,242,242,.92)}' +
-  '.pg-topbar>div{padding:6px 9px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;display:flex;align-items:center;gap:6px}' +
+  '.pg-topbar>div{padding:0 11px;min-height:32px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;display:flex;align-items:center;gap:6px}' +
   '.pg-stage{color:#5a5755}' +
   '.pg-films{border-right:2px solid #201e1d;font-weight:700}' +
   '.pg-films b{color:#ec3013}' +
@@ -54,7 +53,7 @@ export const CSS =
   '.pg-brand{font:800 13px/1 inherit;letter-spacing:.18em;color:#201e1d;display:inline-flex;align-items:center}' +
   ".pg-brand::before{content:'';display:inline-block;width:8px;height:8px;background:#ec3013;margin-right:7px}" +
   '.pg-dot{width:8px;height:8px;background:#ec3013;display:inline-block;margin-left:5px}' +
-  '.pg-tbtn{pointer-events:auto;border:0;border-left:2px solid #201e1d;background:transparent;font:700 11px/1 inherit;letter-spacing:.07em;text-transform:uppercase;padding:0 9px;color:#201e1d;cursor:pointer;text-align:left}' +
+  '.pg-tbtn{pointer-events:auto;border:0;border-left:2px solid #201e1d;background:transparent;font:700 11px/1 inherit;letter-spacing:.07em;text-transform:uppercase;padding:0 11px;min-height:32px;display:flex;align-items:center;color:#201e1d;cursor:pointer}' +
   '.pg-tbtn:hover{background:rgba(236,48,19,.08)}' +
   '.pg-tbtn.onn{background:#ec3013;color:#f3f2f2}' +
   '.pg-net{border-left:2px solid #201e1d;color:#8a8683}' +

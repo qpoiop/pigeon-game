@@ -75,10 +75,14 @@ export class PigeonGame {
   private items: Item[] = [];
   private walls: Bounds[] = [];
   private covers: Bounds[] = [];
+  /** Solid crate obstacles: block the player + line of sight, not guard nav. */
+  private crates: Bounds[] = [];
   private nav!: NavGrid;
   private extractMesh!: THREE.Mesh;
+  private doorLeaf?: THREE.Mesh;
+  private doorBaseY = 1.5;
+  private doorOpen = false;
   private filmCount = 0;
-  private extractT = 0;
   private parts: Particle[] = [];
   private projectiles: Projectile[] = [];
   private arrow!: THREE.Group;
@@ -417,24 +421,24 @@ export class PigeonGame {
       });
     }
 
+    // Former "cover" tiles are now solid low crates — real obstacles that block
+    // movement + sight (the flat teal tiles read as meaningless decoration).
     this.covers = [];
+    this.crates = [];
+    const crateMat = new THREE.MeshLambertMaterial({ color: 0x9a8f82 });
     for (const cv of L.covers) {
-      // teal-tinted zone so it clearly reads as a functional hiding spot
-      const cm = new THREE.Mesh(
-        new THREE.PlaneGeometry(cv.w, cv.d),
-        new THREE.MeshBasicMaterial({ color: 0x18a6c4, transparent: true, opacity: 0.3 }),
+      const cr = bar(cv.x, cv.z, cv.w, cv.d, 1.0, crateMat);
+      // a darker cap so crates read distinctly from the tall ink walls
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(cv.w * 0.96, 0.12, cv.d * 0.96),
+        new THREE.MeshLambertMaterial({ color: 0x6d655c }),
       );
-      cm.rotation.x = -Math.PI / 2;
-      cm.position.set(cv.x, 0.02, cv.z);
-      this.levelGroup.add(cm);
-      const edges = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.PlaneGeometry(cv.w, cv.d)),
-        new THREE.LineBasicMaterial({ color: 0x18a6c4 }),
-      );
-      edges.rotation.x = -Math.PI / 2;
-      edges.position.set(cv.x, 0.03, cv.z);
-      this.levelGroup.add(edges);
-      this.covers.push({
+      cap.position.set(cv.x, 1.02, cv.z);
+      this.levelGroup.add(cap);
+      void cr;
+      // crates block the player + line of sight, but NOT guard nav (many former
+      // cover tiles sit on guard patrol waypoints → adding them would trap guards)
+      this.crates.push({
         minX: cv.x - cv.w / 2,
         maxX: cv.x + cv.w / 2,
         minZ: cv.z - cv.d / 2,
@@ -512,6 +516,28 @@ export class PigeonGame {
     exFill.rotation.x = -Math.PI / 2;
     exFill.position.y = 0.035;
     exg.add(exFill);
+    // a real exit door: two posts + lintel + a leaf that lifts once it unlocks
+    const doorW = Math.max(3, ex[2]);
+    const postH = 3.2;
+    const frameMat2 = new THREE.MeshLambertMaterial({ color: 0x201e1d });
+    for (const px of [-doorW / 2, doorW / 2]) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.45, postH, 0.7), frameMat2);
+      p.position.set(px, postH / 2, 0);
+      p.castShadow = true;
+      exg.add(p);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorW + 0.9, 0.5, 0.7), frameMat2);
+    lintel.position.set(0, postH + 0.25, 0);
+    exg.add(lintel);
+    const leaf = new THREE.Mesh(
+      new THREE.BoxGeometry(doorW - 0.25, postH - 0.2, 0.28),
+      new THREE.MeshLambertMaterial({ color: ACCENT }),
+    );
+    this.doorBaseY = (postH - 0.2) / 2;
+    leaf.position.set(0, this.doorBaseY, 0);
+    exg.add(leaf);
+    this.doorLeaf = leaf;
+    this.doorOpen = false;
     exg.position.set(ex[0], 0, ex[1]);
     this.levelGroup.add(exg);
     this.extractMesh = exFill;
@@ -682,7 +708,6 @@ export class PigeonGame {
     this.$('.pg-b-crouch').classList.remove('onn');
     this.moveTarget = null;
     this.filmCount = 0;
-    this.extractT = 0;
     this.stageTime = 0;
     this.spotted = 0;
     const mpc = this.$<HTMLCanvasElement>('.pg-map');
@@ -854,28 +879,28 @@ export class PigeonGame {
       (navigator as unknown as { standalone?: boolean }).standalone === true;
     if (iOS && !standalone) this.canInstall = true;
     (this.$('.pg-drawer') as HTMLElement).style.pointerEvents = 'auto';
-    this.$('.pg-mic').addEventListener('click', async () => {
-      this.sfx.ensure();
-      const v = this.net.voice;
-      const btn = this.$('.pg-mic');
+  }
+
+  /** Enable/mute the voice mic (moved from the header into settings). */
+  private async toggleMic(want: boolean): Promise<boolean> {
+    this.sfx.ensure();
+    const v = this.net.voice;
+    if (want) {
       if (!v.enabled) {
-        btn.textContent = 'MIC 요청중';
         const ok = await v.enable();
         if (!ok) {
-          btn.textContent = 'MIC 불가';
           this.toast('마이크 권한이 거부되었습니다');
-          return;
+          return false;
         }
-        btn.textContent = 'MIC 켜짐';
-        btn.classList.add('onn');
         if (this.net.status !== 'on') this.toast('음성은 온라인(방 코드 입력) 시 다른 요원에게 전달됩니다');
       } else {
-        v.setMuted(!v.muted);
-        btn.textContent = v.muted ? 'MIC 꺼짐' : 'MIC 켜짐';
-        btn.classList.toggle('onn', !v.muted);
+        v.setMuted(false);
       }
-      this.updRoster();
-    });
+    } else if (v.enabled) {
+      v.setMuted(true);
+    }
+    this.updRoster();
+    return v.enabled && !v.muted;
   }
 
   /* ---------- Input ---------- */
@@ -969,7 +994,7 @@ export class PigeonGame {
       'wheel',
       (e) => {
         if (this.mode !== 'play') return;
-        this.camDist = Math.max(11, Math.min(24, this.camDist + Math.sign(e.deltaY)));
+        this.camDist = Math.max(11, Math.min(50, this.camDist + Math.sign(e.deltaY)));
         e.preventDefault();
       },
       { passive: false },
@@ -1284,12 +1309,12 @@ export class PigeonGame {
       const dz = best.pos.y - P.pos.y;
       const dl = Math.hypot(dx, dz) || 1;
       P.pos.set(best.pos.x + (dx / dl) * 1.2, best.pos.y + (dz / dl) * 1.2); // land behind
-      this.collide(P.pos, 0.5);
+      this.collide(P.pos, 0.5, true);
       P.facing = Math.atan2(best.pos.x - P.pos.x, best.pos.y - P.pos.y);
       this.damageGuard(best, this.skillDmg() + 3); // backstab bonus
     } else {
       P.pos.set(P.pos.x + Math.sin(P.facing) * 4, P.pos.y + Math.cos(P.facing) * 4);
-      this.collide(P.pos, 0.5);
+      this.collide(P.pos, 0.5, true);
     }
     this.burst(P.pos.x, P.pos.y, ACCENT, 8);
     this.dashT = performance.now() / 1000; // reuse dash stretch + trail
@@ -1346,7 +1371,7 @@ export class PigeonGame {
     }
     this.burst(sx, sz, ACCENT, 6);
     P.pos.set(tx, tz);
-    this.collide(P.pos, 0.5);
+    this.collide(P.pos, 0.5, true);
     this.burst(P.pos.x, P.pos.y, ACCENT, 8);
     this.dashT = now;
     this.addShake(0.22);
@@ -1771,7 +1796,7 @@ export class PigeonGame {
         coneBtns +
         '</div></div>' +
         '<div class="pg-field"><label>카메라 거리</label><div class="pg-range">' +
-        '<input class="pg-cam" type="range" min="11" max="24" step="1" value="' +
+        '<input class="pg-cam" type="range" min="11" max="50" step="1" value="' +
         this.camDist +
         '"><span class="val">' +
         this.camDist +
@@ -1938,10 +1963,11 @@ export class PigeonGame {
     this.paused = true;
     this.sfx.stopAmb();
     const on = !this.sfx.muted;
+    const micOn = this.net.voice.enabled && !this.net.voice.muted;
     this.overlay(
-      '<div class="pg-panel"><div class="hd"><span class="k">Paused</span><h1>일시정지</h1></div>' +
+      '<div class="pg-panel"><div class="hd"><span class="k">Settings</span><h1>설정</h1></div>' +
         '<div class="bd"><div class="pg-set">' +
-        '<div class="pg-field"><label>카메라 거리</label><div class="pg-range"><input class="pg-cam2" type="range" min="11" max="24" step="1" value="' +
+        '<div class="pg-field"><label>카메라 거리</label><div class="pg-range"><input class="pg-cam2" type="range" min="11" max="50" step="1" value="' +
         this.camDist +
         '"><span class="val">' +
         this.camDist +
@@ -1951,6 +1977,12 @@ export class PigeonGame {
         (on ? ' class="sel"' : '') +
         '>켜짐</button><button data-v="0"' +
         (on ? '' : ' class="sel"') +
+        '>꺼짐</button></div></div>' +
+        '<div class="pg-field"><label>음성 마이크</label><div class="pg-toggle pg-micset">' +
+        '<button data-v="1"' +
+        (micOn ? ' class="sel"' : '') +
+        '>켜짐</button><button data-v="0"' +
+        (micOn ? '' : ' class="sel"') +
         '>꺼짐</button></div></div>' +
         '</div></div>' +
         '<div class="ft"><button class="pg-btn pg-resume">재개 →</button><button class="pg-btn ghost pg-retry2">재시도</button><button class="pg-btn ghost pg-menu2">타이틀로</button></div></div>',
@@ -1966,6 +1998,15 @@ export class PigeonGame {
         this.setSound((b as HTMLElement).dataset.v === '1');
         this.host.querySelectorAll('.pg-sound button').forEach((x) => x.classList.remove('sel'));
         b.classList.add('sel');
+      }),
+    );
+    this.host.querySelectorAll('.pg-micset button').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const nowOn = await this.toggleMic((b as HTMLElement).dataset.v === '1');
+        this.host.querySelectorAll('.pg-micset button').forEach((x) => x.classList.remove('sel'));
+        this.host
+          .querySelector('.pg-micset button[data-v="' + (nowOn ? '1' : '0') + '"]')
+          ?.classList.add('sel');
       }),
     );
     this.$('.pg-resume').addEventListener('click', () => this.resume());
@@ -2119,6 +2160,10 @@ export class PigeonGame {
     for (const w of this.walls) {
       if (x > w.minX - pad && x < w.maxX + pad && z > w.minZ - pad && z < w.maxZ + pad) return true;
     }
+    // crates block sight too (inWall backs los + the vision cone clip)
+    for (const c of this.crates) {
+      if (x > c.minX - pad && x < c.maxX + pad && z > c.minZ - pad && z < c.maxZ + pad) return true;
+    }
     return false;
   }
 
@@ -2146,14 +2191,19 @@ export class PigeonGame {
     }
     return false;
   }
-  /** Returns true if the actor was pushed out of a wall this call (for FX). */
-  private collide(pos: THREE.Vector2, r: number): boolean {
+  /**
+   * Push `pos` out of any solid AABB. Returns true if it was moved (for FX).
+   * `crates` adds the low crate obstacles — only the player passes it, since
+   * crates aren't in the guard nav grid (guards would otherwise jam on them).
+   */
+  private collide(pos: THREE.Vector2, r: number, crates = false): boolean {
     let hit = false;
     const hw = this.level.w / 2 - r;
     const hd = this.level.d / 2 - r;
     pos.x = Math.max(-hw, Math.min(hw, pos.x));
     pos.y = Math.max(-hd, Math.min(hd, pos.y));
-    for (const w of this.walls) {
+    const solids = crates ? this.walls.concat(this.crates) : this.walls;
+    for (const w of solids) {
       // Minkowski-expanded AABB: grow the wall by the actor radius; if the point
       // lands inside, push it out along the axis of least penetration. Unlike the
       // old closest-point test this also resolves DEEP penetration (center inside
@@ -2356,7 +2406,7 @@ export class PigeonGame {
         P.pos.x += ix * maxSp * dt;
         P.pos.y += iz * maxSp * dt;
         // wall bump: dust puff + micro shake when driving into a wall (throttled)
-        if (this.collide(P.pos, 0.5) && il > 0.3) {
+        if (this.collide(P.pos, 0.5, true) && il > 0.3) {
           const nowMs = performance.now();
           if (nowMs - this.lastBump > 150) {
             this.lastBump = nowMs;
@@ -2403,51 +2453,43 @@ export class PigeonGame {
             }
           }
         }
-        // extraction — co-op: both agents must hold the exit zone together
-        // (skipped on boss stages, where the win condition is defeating the boss)
+        // clear = defeat every guard, then reach the exit DOOR (which unlocks +
+        // opens once the last guard falls). Boss stages win on boss HP instead.
         const ex = this.level.extract;
-        const ready = !this.boss && this.filmCount === this.films.length;
-        (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = ready
-          ? 0.28 + Math.sin(t * 5) * 0.12
-          : 0.08;
         const inExit = (ax: number, az: number) =>
-          Math.abs(ax - ex[0]) < ex[2] / 2 && Math.abs(az - ex[1]) < ex[3] / 2;
-        // downed teammates are carried: they count as "ready" without holding the exit,
-        // but at least one living agent must actually reach it to trigger extraction.
-        const guestDown = this.livePeer()?.down === 1;
-        this.coHostEsc = ready && (P.downed || inExit(P.pos.x, P.pos.y)) ? 1 : 0;
-        this.coGuestEsc = ready && gp && (guestDown || inExit(gp.x, gp.z)) ? 1 : 0;
-        const aliveInExit =
-          (!P.downed && inExit(P.pos.x, P.pos.y)) ||
-          (!!gp && !guestDown && inExit(gp.x, gp.z));
-        if (this.boss) {
-          /* boss stage: objective handled by boss HP, no extraction */
-        } else if (this.coHostEsc === 1 && (!gp || this.coGuestEsc === 1) && aliveInExit) {
-          this.extractT += dt;
-          const pct = Math.min(100, Math.round((this.extractT / 1.2) * 100));
-          this.$('.pg-objective').textContent = (gp ? '동반 탈출 중… ' : '탈출 중… ') + pct + '%';
-          if (this.extractT > 1.2) this.clearStage();
-        } else {
-          this.extractT = 0;
-          if (this.coHostEsc === 1 && gp && this.coGuestEsc === 0)
-            this.$('.pg-objective').textContent = '동료의 탈출을 기다리는 중…';
-        }
-        // primary clear condition: defeat every guard on non-boss stages (host/solo
-        // decides; the guest gets the cleared flag via the world snapshot)
-        if (!this.boss && this.net.role() !== 'guest') {
+          Math.abs(ax - ex[0]) < ex[2] / 2 + 0.6 && Math.abs(az - ex[1]) < ex[3] / 2 + 0.6;
+        if (!this.boss) {
           let alive = 0;
           for (const g of this.guards) if (!g.down) alive++;
-          this.$('.pg-objective').textContent =
-            alive > 0 ? '목표 — 적 전원 제압 · 남은 적 ' + alive : '적 소탕 완료';
-          if (alive === 0 && this.mode === 'play') this.clearStage();
+          const open = alive === 0;
+          if (open && !this.doorOpen) this.sfx.clear();
+          this.doorOpen = open;
+          (this.extractMesh.material as THREE.MeshBasicMaterial).opacity = open
+            ? 0.3 + Math.sin(t * 5) * 0.12
+            : 0.05;
+          if (open) {
+            this.$('.pg-objective').textContent = '탈출구 개방 — 문으로 탈출하라';
+            const atExit =
+              (!P.downed && inExit(P.pos.x, P.pos.y)) || (!!gp && inExit(gp.x, gp.z));
+            if (atExit && this.mode === 'play' && this.net.role() !== 'guest') this.clearStage();
+          } else {
+            this.$('.pg-objective').textContent = '목표 — 적 전원 제압 · 남은 적 ' + alive;
+          }
         }
-        // objective arrow — on boss stages point at the boss; otherwise at the
-        // nearest surviving guard (clear = defeat them all)
+        // door leaf slides up when the exit unlocks
+        if (this.doorLeaf) {
+          const target = this.doorBaseY + (this.doorOpen ? 3.0 : 0);
+          this.doorLeaf.position.y += (target - this.doorLeaf.position.y) * Math.min(1, dt * 4);
+        }
+        // objective arrow — boss → boss; door open → exit; else nearest guard
         let atx: number | null = null;
         let atz: number | null = null;
         if (this.boss) {
           atx = this.boss.pos.x;
           atz = this.boss.pos.y;
+        } else if (this.doorOpen) {
+          atx = this.level.extract[0];
+          atz = this.level.extract[1];
         } else {
           let bd2 = 1e9;
           for (const g of this.guards) {
@@ -2936,8 +2978,8 @@ export class PigeonGame {
     const Z = (z: number) => (z + L.d / 2) * sz;
     c.fillStyle = '#eceae8';
     c.fillRect(0, 0, W, H);
-    c.fillStyle = '#c9c6c3';
-    for (const cv of this.covers) {
+    c.fillStyle = '#9a8f82';
+    for (const cv of this.crates) {
       c.fillRect(X(cv.minX), Z(cv.minZ), (cv.maxX - cv.minX) * sx, (cv.maxZ - cv.minZ) * sz);
     }
     c.fillStyle = '#201e1d';
