@@ -19,7 +19,8 @@ import type { BirdKind } from '../data/characters';
  * here to switch that species to 3D. Relative to the app base (`./`).
  */
 export const MODELS: Partial<Record<BirdKind, string>> = {
-  pigeon: 'pigeon/pigeon.glb',
+  // pigeon: 'pigeon/pigeon.glb', // disabled: rig-less static mesh looked stiff
+  //   + undersized; awaiting a replacement model. Procedural makeBird meanwhile.
 };
 
 /**
