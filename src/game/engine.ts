@@ -123,6 +123,7 @@ export class PigeonGame {
   private kills = 0;
   private killQuota = 0;
   private waveT = 0;
+  private nextAugKill = 6; // kills needed for the next mid-run augment offer
   private static readonly COMBO_WINDOW = 3.2;
   private static readonly WAVE_INTERVAL = 4.5;
 
@@ -802,6 +803,7 @@ export class PigeonGame {
     this.comboT = 0;
     this.kills = 0;
     this.waveT = PigeonGame.WAVE_INTERVAL;
+    this.nextAugKill = 6;
     this.killQuota = this.boss ? 0 : 14 + this.stageIdx * 8;
     this.updCombo();
     this.updScore();
@@ -852,6 +854,58 @@ export class PigeonGame {
       '</span><span class="x"><b>' +
       this.combo +
       '</b> 연속</span><div class="cbar"><i></i></div>';
+  }
+
+  /** Mid-run upgrade: pause and offer a 3-card augment pick at kill milestones. */
+  private offerAugment(): void {
+    if (this.paused || this.mode !== 'play' || this.net.role() === 'guest') return;
+    this.nextAugKill += 7; // schedule the next offer regardless of outcome
+    const choices = this.rollAugChoices();
+    if (!choices.length) return; // everything maxed
+    this.paused = true;
+    this.sfx.stopAmb();
+    let cards = '<div class="pg-cards">';
+    for (const id of choices) {
+      const a = augDef(id);
+      const lv = (this.aug[id] || 0) + 1;
+      cards +=
+        '<button class="pg-card" data-a="' +
+        id +
+        '"><span class="ic">' +
+        a.icon +
+        '</span><span class="mid"><span class="nm">' +
+        a.name +
+        '</span><span class="ds">' +
+        a.desc +
+        '</span></span><span class="lv">Lv.' +
+        lv +
+        '/' +
+        a.max +
+        '</span></button>';
+    }
+    cards += '</div>';
+    this.overlay(
+      '<div class="pg-panel"><div class="hd"><span class="k">Upgrade</span><h1>증강 획득</h1></div>' +
+        '<div class="bd"><p>처치 ' +
+        this.kills +
+        ' — 증강을 하나 선택하라.</p>' +
+        cards +
+        '</div></div>',
+      true,
+    );
+    this.overlayEl()
+      .querySelectorAll<HTMLElement>('.pg-card')
+      .forEach((c) => {
+        c.addEventListener('click', () => {
+          this.applyAug(c.dataset.a as AugId);
+          this.closeOverlay();
+          this.paused = false;
+          if (!this.sfx.muted) {
+            this.sfx.ensure();
+            this.sfx.startAmb();
+          }
+        });
+      });
   }
   /** Spawn `n` alerted reinforcements from the far (exit) end, so they stream in
    *  from ahead and the player fights forward toward the exit. */
@@ -1601,6 +1655,8 @@ export class PigeonGame {
       this.addShake(Math.min(0.5, 0.16 + this.combo * 0.02));
       this.burst(G.pos.x, G.pos.y, 0xec3013, 10 + Math.min(18, this.combo * 2));
       this.burst(G.pos.x, G.pos.y, 0xffffff, 6);
+      // stepwise mid-run upgrades: every so many kills, offer an augment
+      if (this.kills >= this.nextAugKill) this.offerAugment();
     } else {
       this.burst(G.pos.x, G.pos.y, 0x8a8683, 8);
       this.updFilms();
