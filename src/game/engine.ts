@@ -913,14 +913,23 @@ export class PigeonGame {
     const L = this.level;
     const P = this.player;
     const ex = L.extract;
-    const dir = Math.sign(P.pos.y - ex[1]) || 1; // exit → player direction (down the corridor)
+    // spawn just inside the exit END along the long (corridor) axis, spread across
+    // the short (width) axis — so enemies pour in from ahead toward the player.
+    const longX = L.w >= L.d;
     for (let i = 0; i < n; i++) {
       let px = 0;
       let pz = 0;
       let ok = false;
       for (let tries = 0; tries < 30; tries++) {
-        px = Math.max(-L.w / 2 + 2, Math.min(L.w / 2 - 2, ex[0] + (Math.random() * 2 - 1) * L.w * 0.42));
-        pz = ex[1] + dir * Math.random() * L.d * 0.16; // just inside the far end
+        if (longX) {
+          const dirX = Math.sign(P.pos.x - ex[0]) || -1;
+          px = ex[0] + dirX * Math.random() * L.w * 0.16;
+          pz = Math.max(-L.d / 2 + 2, Math.min(L.d / 2 - 2, ex[1] + (Math.random() * 2 - 1) * L.d * 0.42));
+        } else {
+          const dirZ = Math.sign(P.pos.y - ex[1]) || -1;
+          pz = ex[1] + dirZ * Math.random() * L.d * 0.16;
+          px = Math.max(-L.w / 2 + 2, Math.min(L.w / 2 - 2, ex[0] + (Math.random() * 2 - 1) * L.w * 0.42));
+        }
         if (!this.inWall(px, pz, 0.6) && Math.hypot(px - P.pos.x, pz - P.pos.y) > 9) {
           ok = true;
           break;

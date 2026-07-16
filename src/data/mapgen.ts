@@ -58,65 +58,71 @@ function mulberry32(seed: number): () => number {
 export function genLevel(o: GenOpts): LevelDef {
   const { cell } = o;
   const rand = mulberry32(o.seed);
-  const gw = o.gw; // lane width (cells)
-  const gh = o.gh + [0, 2, 4][Math.floor(rand() * 3)]; // corridor length varies per seed
+  const gw = o.gw + [0, 2, 4][Math.floor(rand() * 3)]; // corridor LENGTH (cells, along X)
+  const gh = o.gh; // corridor WIDTH (cells, along Z)
   const W = gw * cell;
   const D = gh * cell;
   const cx = (x: number) => x * cell - W / 2 + cell / 2;
-  const cz = (y: number) => y * cell - D / 2 + cell / 2;
+  const cz = (z: number) => z * cell - D / 2 + cell / 2;
 
-  // A straight corridor (not a maze): mostly open, with scattered obstacle blocks
-  // between a guaranteed ~3-wide weaving lane so it's always traversable end-to-end.
+  // Horizontal corridor (left→right): a weaving open lane through a wall grid,
+  // with periodic gated cross-walls (chokepoints) and cover blocks between them,
+  // so the walls actually shape the fight instead of being sparse scatter.
   const wall: boolean[][] = Array.from({ length: gh }, () => Array(gw).fill(false));
-  const laneCol: number[] = new Array(gh);
-  let pc = 1 + Math.floor(rand() * (gw - 2));
-  for (let y = gh - 1; y >= 0; y--) {
-    laneCol[y] = pc;
-    pc = Math.max(1, Math.min(gw - 2, pc + [-1, 0, 0, 1][Math.floor(rand() * 4)]));
+  const laneRow: number[] = new Array(gw);
+  let lr = 1 + Math.floor(rand() * (gh - 2));
+  for (let x = 0; x < gw; x++) {
+    laneRow[x] = lr;
+    lr = Math.max(1, Math.min(gh - 2, lr + [-1, 0, 0, 1][Math.floor(rand() * 4)]));
   }
-  for (let y = 2; y < gh - 2; y++)
-    for (let x = 1; x < gw - 1; x++)
-      if (Math.abs(x - laneCol[y]) > 1 && rand() < 0.34) wall[y][x] = true;
+  for (let x = 2; x < gw - 2; x++) {
+    const choke = x % 4 === 0; // a gated cross-wall every 4 columns
+    for (let z = 1; z < gh - 1; z++) {
+      if (Math.abs(z - laneRow[x]) <= (choke ? 0 : 1)) continue; // choke = 1-cell gate; else 3-wide lane
+      if (choke) wall[z][x] = true; // full-height wall except the lane gap
+      else if (rand() < 0.4) wall[z][x] = true; // denser cover between chokepoints
+    }
+  }
 
-  // player spawns at one end, exit at the far end (enemies stream from there)
-  const sc: [number, number] = [laneCol[gh - 2], gh - 2];
-  const ec: [number, number] = [laneCol[1], 1];
+  // player at the left end, exit at the right end (enemies stream from the right)
+  const sc: [number, number] = [1, laneRow[1]];
+  const ec: [number, number] = [gw - 2, laneRow[gw - 2]];
 
-  // emit obstacle cells as short crate-height walls, merging horizontal runs
+  // emit wall cells as crate-height blocks, merging horizontal runs per row
   const walls: Rect[] = [];
-  for (let y = 0; y < gh; y++) {
+  for (let z = 0; z < gh; z++) {
     let run = 0;
     for (let x = 0; x <= gw; x++) {
-      const solid = x < gw && wall[y][x];
+      const solid = x < gw && wall[z][x];
       if (solid) run++;
       else if (run) {
         const x0 = x - run;
-        walls.push({ x: (cx(x0) + cx(x - 1)) / 2, z: cz(y), w: run * cell, d: cell, h: 1.3 });
+        walls.push({ x: (cx(x0) + cx(x - 1)) / 2, z: cz(z), w: run * cell, d: cell, h: 1.7 });
         run = 0;
       }
     }
   }
 
   const spawn: [number, number] = [cx(sc[0]), cz(sc[1])];
-  const extract: [number, number, number, number] = [cx(ec[0]), cz(ec[1]), cell * 1.6, cell * 1.4];
+  const extract: [number, number, number, number] = [cx(ec[0]), cz(ec[1]), cell * 1.4, cell * 1.7];
 
-  // initial enemies wait in the far third; the rest arrive as reinforcement waves
+  // initial enemies wait in the right third; the rest arrive as reinforcement waves
   const guards: GuardSpawn[] = [];
   const used = new Set<string>();
-  const farRows = Math.max(2, Math.floor(gh * 0.35));
+  const rightStart = Math.floor(gw * 0.6);
   for (let i = 0; i < o.guards; i++) {
-    // sit on the guaranteed lane in the far third → always reachable, no pockets
-    let gy = 2 + Math.floor(rand() * farRows);
-    let gx = laneCol[gy] + [-1, 0, 1][Math.floor(rand() * 3)];
-    for (let tries = 0; tries < 20 && used.has(gx + ',' + gy); tries++) {
-      gy = 2 + Math.floor(rand() * farRows);
-      gx = laneCol[gy] + [-1, 0, 1][Math.floor(rand() * 3)];
+    let gx = rightStart + Math.floor(rand() * Math.max(1, gw - 2 - rightStart));
+    let gz = laneRow[Math.min(gw - 2, gx)] + [-1, 0, 1][Math.floor(rand() * 3)];
+    for (let tries = 0; tries < 20 && used.has(gx + ',' + gz); tries++) {
+      gx = rightStart + Math.floor(rand() * Math.max(1, gw - 2 - rightStart));
+      gz = laneRow[Math.min(gw - 2, gx)] + [-1, 0, 1][Math.floor(rand() * 3)];
     }
     gx = Math.max(1, Math.min(gw - 2, gx));
-    used.add(gx + ',' + gy);
+    gz = Math.max(1, Math.min(gh - 2, gz));
+    used.add(gx + ',' + gz);
     const k = GUARD_CLASSES[Math.floor(rand() * GUARD_CLASSES.length)];
     guards.push({
-      path: [[cx(gx), cz(gy)]],
+      path: [[cx(gx), cz(gz)]],
       speed: k.speed + rand() * 0.3,
       range: k.range,
       type: k.type,
@@ -145,7 +151,7 @@ export function genLevel(o: GenOpts): LevelDef {
 
 /** Per-stage generation presets (index 0..2; the boss stage stays hand-authored). */
 export const STAGE_GEN: { gw: number; gh: number; cell: number; guards: number }[] = [
-  { gw: 9, gh: 15, cell: 4, guards: 5 },
-  { gw: 9, gh: 19, cell: 4, guards: 6 },
-  { gw: 11, gh: 23, cell: 4, guards: 8 },
+  { gw: 18, gh: 7, cell: 4, guards: 5 }, // gw = length (X), gh = width (Z)
+  { gw: 24, gh: 7, cell: 4, guards: 6 },
+  { gw: 30, gh: 9, cell: 4, guards: 8 },
 ];
