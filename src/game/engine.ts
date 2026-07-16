@@ -160,7 +160,7 @@ export class PigeonGame {
   constructor(host: HTMLElement, opts: GameOptions) {
     this.host = host;
     this.showCones = opts.showCones;
-    this.camDist = opts.camDist;
+    this.camDist = Math.min(30, opts.camDist); // clamp any old saved value past the fog
     this.net = new Net(() => this.netStatus());
     this.loadPrefs();
   }
@@ -1033,7 +1033,7 @@ export class PigeonGame {
       'wheel',
       (e) => {
         if (this.mode !== 'play') return;
-        this.camDist = Math.max(11, Math.min(50, this.camDist + Math.sign(e.deltaY)));
+        this.camDist = Math.max(11, Math.min(30, this.camDist + Math.sign(e.deltaY)));
         e.preventDefault();
       },
       { passive: false },
@@ -1824,7 +1824,7 @@ export class PigeonGame {
         coneBtns +
         '</div></div>' +
         '<div class="pg-field"><label>카메라 거리</label><div class="pg-range">' +
-        '<input class="pg-cam" type="range" min="11" max="50" step="1" value="' +
+        '<input class="pg-cam" type="range" min="11" max="30" step="1" value="' +
         this.camDist +
         '"><span class="val">' +
         this.camDist +
@@ -2015,7 +2015,7 @@ export class PigeonGame {
     this.overlay(
       '<div class="pg-panel"><div class="hd"><span class="k">Settings</span><h1>설정</h1></div>' +
         '<div class="bd"><div class="pg-set">' +
-        '<div class="pg-field"><label>카메라 거리</label><div class="pg-range"><input class="pg-cam2" type="range" min="11" max="50" step="1" value="' +
+        '<div class="pg-field"><label>카메라 거리</label><div class="pg-range"><input class="pg-cam2" type="range" min="11" max="30" step="1" value="' +
         this.camDist +
         '"><span class="val">' +
         this.camDist +
