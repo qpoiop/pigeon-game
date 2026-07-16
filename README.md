@@ -214,6 +214,11 @@ React는 마운트 대상 `<div>`를 만들어 엔진을 붙이고 언마운트 
 
 ## 크레딧 (3D 에셋)
 
+- 보스(phoenix) 모델: This work is based on ["phoenix bird"](https://sketchfab.com/3d-models/phoenix-bird-844ba0cf144a413ea92c779f18912042)
+  by [NORBERTO-3D](https://sketchfab.com/norberto3d), licensed under
+  [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). 스켈레탈 리그 + 베이크
+  애니(Take 001), Draco + WebP 압축(1.75MB → 460KB). `public/phoenix/license.txt` 참조.
+
 - 참새(sparrow) 캐릭터: This work is based on ["Lowpoly bird animation"](https://sketchfab.com/3d-models/lowpoly-bird-animation-05b856921ecc4af1b477fb2fb8e0f8ff)
   by [Khyoocumber](https://sketchfab.com/Khyoocumber), licensed under
   [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). 스켈레탈 리그 + 베이크

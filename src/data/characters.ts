@@ -12,7 +12,7 @@ export interface BirdPalette {
 }
 
 /** The visual "kind" the bird builder branches on for silhouette details. */
-export type BirdKind = 'pigeon' | 'magpie' | 'owl' | 'guard' | 'sparrow';
+export type BirdKind = 'pigeon' | 'magpie' | 'owl' | 'guard' | 'sparrow' | 'phoenix';
 
 /** Combat archetype. Melee strikes an arc in front; ranged fires a projectile. */
 export type AtkType = 'melee' | 'ranged';

@@ -19,7 +19,10 @@ import type { BirdKind } from '../data/characters';
  * here to switch that species to 3D. Relative to the app base (`./`).
  */
 export const MODELS: Partial<Record<BirdKind, string>> = {
-  sparrow: 'sparrow/sparrow.glb', // rigged + baked clips → Path B (skeletal)
+  // sparrow disabled: its rig (mesh + skeleton as separate roots) wouldn't render;
+  // the sparrow character falls back to the procedural bird for now.
+  // sparrow: 'sparrow/sparrow.glb',
+  phoenix: 'phoenix/phoenix.glb', // boss model — skinned + baked 'Take 001' clip
 };
 
 /**
@@ -30,11 +33,13 @@ export const MODELS: Partial<Record<BirdKind, string>> = {
  */
 const NORM: Partial<Record<BirdKind, { height: number; yaw: number }>> = {
   sparrow: { height: 2.2, yaw: 0 },
+  phoenix: { height: 5, yaw: 0 }, // boss — large
 };
 
 /** Kinds whose model is a skinned mesh with baked clips → Path B (skeletal). */
 const SKINNED: Partial<Record<BirdKind, boolean>> = {
   sparrow: true,
+  phoenix: true,
 };
 
 /** Draco decoder location. For offline/self-host, copy the decoder to public/draco/. */
@@ -71,11 +76,14 @@ function normalizeModel(
     // skinned bounds animate out of the bind-pose box → don't frustum-cull them
     m.frustumCulled = false;
     if (skinned) {
-      // keep the baked texture, but move it onto the game's lit material so it
-      // reads under the scene lights (imported PBR often renders near-black here)
-      const src = m.material as THREE.MeshStandardMaterial | undefined;
-      const map = src && 'map' in src ? src.map : null;
-      m.material = new THREE.MeshLambertMaterial({ color: 0xffffff, map: map ?? null });
+      // keep the authored PBR material (textures + emissive) as-is — swapping it
+      // out was losing the map / rendering the mesh dark. Just make sure it shows.
+      const sm = m.material as THREE.MeshStandardMaterial | undefined;
+      if (sm) {
+        sm.transparent = false;
+        sm.depthWrite = true;
+        if ('emissiveIntensity' in sm && sm.emissiveMap) sm.emissiveIntensity = 1;
+      }
     } else {
       // rig-less static mesh: recompute normals (simplify drops them) + lit
       // vertex-colour material so it matches the game's look

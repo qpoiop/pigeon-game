@@ -685,9 +685,11 @@ export class PigeonGame {
     // boss (final stage): a large commander with 3 telegraphed attack patterns
     if (L.boss) {
       const bm =
-        birdModel('guard') ??
+        birdModel('phoenix', true) ?? // clone so it's safe to dispose on rebuild
         makeBird({ body: 0x1a1614, head: 0x120f0e, wing: 0x0e0c0b, accent: 0xec3013 }, 'guard');
-      bm.group.scale.setScalar(2.6);
+      // the phoenix model is already sized via NORM; the procedural fallback needs 2.6
+      const bossScale = bm.mixer ? 1 : 2.6;
+      bm.group.scale.setScalar(bossScale);
       this.levelGroup.add(bm.group);
       const btele = new THREE.Mesh(
         new THREE.BoxGeometry(0.5, 0.05, 1),
@@ -1764,7 +1766,7 @@ export class PigeonGame {
     }
     b.model.group.position.set(b.pos.x, 0, b.pos.y);
     b.model.group.rotation.y = b.facing;
-    b.model.group.scale.setScalar(2.6 * (1 + b.hurtFlash * 0.06));
+    b.model.group.scale.setScalar((b.model.mixer ? 1 : 2.6) * (1 + b.hurtFlash * 0.06));
     animBird(b.model, { speed: b.phase === 2 ? 18 : 2, dt, t, crouch: false });
   }
 
