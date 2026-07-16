@@ -1311,7 +1311,9 @@ export class PigeonGame {
     P.atkT = now;
     this.sfx.ensure();
     if (cb.atk === 'ranged') {
-      this.spawnProjectile(P.pos.x, P.pos.y, P.facing, cb.dmg, cb.projSpeed ?? 24, false);
+      const psp = cb.projSpeed ?? 24;
+      // life caps travel at the character's range (was flying the whole map)
+      this.spawnProjectile(P.pos.x, P.pos.y, P.facing, cb.dmg, psp, false, false, cb.range / psp);
       // muzzle flash + a fading tracer streak so the shot reads (not just a dot)
       this.burst(P.pos.x + Math.sin(P.facing) * 0.9, P.pos.y + Math.cos(P.facing) * 0.9, 0x18a6c4, 8);
       const tl = Math.min(cb.range, this.wallDist(P.pos.x, P.pos.y, P.facing, cb.range));
@@ -1412,20 +1414,32 @@ export class PigeonGame {
     speed: number,
     enemy: boolean,
     pierce = false,
+    life = 2.4,
   ): void {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(pierce ? 0.32 : 0.26, 10, 8),
-      new THREE.MeshBasicMaterial({ color: enemy ? ACCENT : pierce ? 0xe0a021 : 0x18a6c4 }),
+    const color = enemy ? ACCENT : pierce ? 0xe0a021 : 0x18a6c4;
+    // an elongated bullet (oriented along travel) reads far better than a dot
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.CapsuleGeometry(pierce ? 0.22 : 0.16, pierce ? 0.9 : 0.7, 4, 8),
+      new THREE.MeshBasicMaterial({ color }),
     );
-    m.position.set(x, 0.7, z);
-    this.fxGroup.add(m);
+    core.rotation.x = Math.PI / 2; // capsule long axis → local Z (forward)
+    g.add(core);
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(pierce ? 0.42 : 0.34, 10, 8),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, depthWrite: false }),
+    );
+    g.add(glow);
+    g.position.set(x, 0.7, z);
+    g.rotation.y = facing;
+    this.fxGroup.add(g);
     this.projectiles.push({
-      mesh: m,
+      mesh: g as unknown as THREE.Mesh,
       x,
       z,
       vx: Math.sin(facing) * speed,
       vz: Math.cos(facing) * speed,
-      life: 2.4,
+      life,
       dmg,
       enemy,
       pierce,
@@ -2908,8 +2922,7 @@ export class PigeonGame {
           }
           if (gone) {
             this.fxGroup.remove(pr.mesh);
-            (pr.mesh.material as THREE.Material).dispose();
-            pr.mesh.geometry.dispose();
+            disposeObject(pr.mesh); // mesh is a Group (bullet + glow) → dispose children
             this.projectiles.splice(prI, 1);
           }
         }
