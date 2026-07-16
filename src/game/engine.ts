@@ -1000,21 +1000,29 @@ export class PigeonGame {
     if (!bd || !this.level) return;
     const L = this.level;
     let h = '<h3>작전 — ' + L.name + '</h3><p class="brief">' + L.brief + '</p>';
-    h += '<h3>체크리스트</h3><ul>';
-    for (let i = 0; i < this.films.length; i++) {
-      const f = this.films[i];
+    h += '<h3>목표</h3><ul>';
+    if (this.boss) {
+      h += '<li><span>적 사령관 제압</span><span class="todo">교전</span></li>';
+    } else {
+      const met = this.kills >= this.killQuota;
       h +=
-        '<li><span>마이크로필름 #' +
-        (i + 1) +
-        '</span>' +
-        (f.got ? '<span class="ok">회수</span>' : '<span class="todo">미회수</span>') +
-        '</li>';
+        '<li><span>처치 쿼터</span><span class="' +
+        (met ? 'ok' : 'todo') +
+        '">' +
+        this.kills +
+        '/' +
+        this.killQuota +
+        '</span></li>' +
+        '<li><span>탈출구 도달</span><span class="' +
+        (met ? 'ok' : 'todo') +
+        '">' +
+        (met ? '개방됨' : '쿼터 필요') +
+        '</span></li>' +
+        '<li><span>점수</span><span class="ok">' +
+        this.score.toLocaleString() +
+        '</span></li>';
     }
-    const ready = this.filmCount === this.films.length;
-    h +=
-      '<li><span>회수 지점 탈출</span>' +
-      (ready ? '<span class="ok">개방됨</span>' : '<span class="todo">필름 전부 필요</span>') +
-      '</li></ul>';
+    h += '</ul>';
     h +=
       '<h3>요원 — ' +
       CHARS[this.charId].name +

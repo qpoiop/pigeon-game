@@ -187,9 +187,10 @@ export const CSS =
   /* overlay */
   '.pg-install{position:absolute;top:10px;right:12px;z-index:50;display:none;border:2px solid #ec3013;background:#ec3013;color:#f3f2f2;font:800 12px/1 inherit;letter-spacing:.08em;padding:9px 13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)}' +
   '.pg-install.show{display:block}' +
-  '.pg-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(243,242,242,.86);overflow:auto;z-index:40}' +
-  '.pg-overlay.show{display:flex}' +
-  '.pg-panel{width:min(620px,92%);max-height:92%;overflow-y:auto;border:2px solid #201e1d;background:#f3f2f2;margin:16px 0}' +
+  '.pg-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(243,242,242,.86);overflow:auto;z-index:40;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s ease,visibility .2s}' +
+  '.pg-overlay.show{opacity:1;visibility:visible;pointer-events:auto}' +
+  '.pg-panel{width:min(620px,92%);max-height:92%;overflow-y:auto;border:2px solid #201e1d;background:#f3f2f2;margin:16px 0;transform:translateY(8px) scale(.99);transition:transform .2s ease}' +
+  '.pg-overlay.show .pg-panel{transform:none}' +
   '.pg-panel .hd{border-bottom:2px solid #201e1d;padding:16px 22px;display:flex;align-items:baseline;gap:12px}' +
   '.pg-panel .hd .k{font-size:11px;letter-spacing:.2em;color:#ec3013;font-weight:700;text-transform:uppercase}' +
   '.pg-panel h1{margin:0;font-size:clamp(22px,3.4vw,32px);font-weight:800;letter-spacing:-.01em;text-transform:uppercase}' +
