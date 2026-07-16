@@ -1318,7 +1318,7 @@ export class PigeonGame {
       this.kickZoom(0.5);
       this.sfx.dash();
     } else {
-      const reach = cb.range * 1.4; // longer reach + a wider arc so hits land
+      const reach = cb.range * 1.8; // longer reach + a wider arc so hits land
       let hit = false;
       for (const G of this.guards) {
         if (G.down) continue;
@@ -1328,7 +1328,7 @@ export class PigeonGame {
         let a = Math.atan2(dx, dz) - P.facing;
         while (a > Math.PI) a -= Math.PI * 2;
         while (a < -Math.PI) a += Math.PI * 2;
-        if (Math.abs(a) < 1.3) {
+        if (Math.abs(a) < 1.45) {
           this.damageGuard(G, cb.dmg);
           hit = true;
         }
@@ -1342,26 +1342,35 @@ export class PigeonGame {
           let a = Math.atan2(dx, dz) - P.facing;
           while (a > Math.PI) a -= Math.PI * 2;
           while (a < -Math.PI) a += Math.PI * 2;
-          if (Math.abs(a) < 1.3) {
+          if (Math.abs(a) < 1.45) {
             this.damageBoss(cb.dmg);
             hit = true;
           }
         }
       }
-      // bigger strike puff + a wide swipe arc flashing the reach in front
+      // big strike puff + a wide swipe arc + an expanding shock ring
       this.burst(
         P.pos.x + Math.sin(P.facing) * reach * 0.55,
         P.pos.y + Math.cos(P.facing) * reach * 0.55,
         ACCENT,
-        hit ? 16 : 10,
+        hit ? 28 : 16,
       );
       this.swipe.position.set(P.pos.x, 0.08, P.pos.y);
       this.swipe.rotation.y = P.facing;
-      this.swipe.scale.setScalar(reach * 1.15);
+      this.swipe.scale.setScalar(reach * 1.45);
       this.swipe.visible = true;
-      this.swipeT = 0.24;
-      this.addShake(hit ? 0.28 : 0.12);
-      if (hit) this.freeze(0.06);
+      this.swipeT = 0.34;
+      const sring = new THREE.Mesh(
+        new THREE.RingGeometry(reach * 0.55, reach * 0.72, 28, 1, -0.5, 1),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      sring.rotation.x = -Math.PI / 2;
+      sring.rotation.z = -P.facing;
+      sring.position.set(P.pos.x, 0.1, P.pos.y);
+      this.fxGroup.add(sring);
+      this.ghosts.push({ m: sring, t: 0.22 });
+      this.addShake(hit ? 0.36 : 0.16);
+      if (hit) this.freeze(0.08);
       this.sfx.ui();
     }
     if ((this.aug.shock || 0) > 0) this.shockwave(P.pos.x, P.pos.y);
@@ -2632,7 +2641,7 @@ export class PigeonGame {
       // melee swipe arc fade
       if (this.swipeT > 0) {
         this.swipeT -= realDt;
-        (this.swipe.material as THREE.MeshBasicMaterial).opacity = 0.72 * Math.max(0, this.swipeT / 0.24);
+        (this.swipe.material as THREE.MeshBasicMaterial).opacity = 0.85 * Math.max(0, this.swipeT / 0.34);
         if (this.swipeT <= 0) this.swipe.visible = false;
       }
       if (this.mode !== 'play' && this.arrow) this.arrow.visible = false;
