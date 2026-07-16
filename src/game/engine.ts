@@ -101,6 +101,7 @@ export class PigeonGame {
   private aimLine!: THREE.Mesh;
   private aimFill!: THREE.Mesh;
   private aimT = 0;
+  private frameN = 0;
 
   // shared squad alarm — most recent known player location (for coordinated search)
   private alarmX = 0;
@@ -232,10 +233,11 @@ export class PigeonGame {
   /* ---------- 3D setup ---------- */
   private setup3D(): void {
     const canvas = this.$<HTMLCanvasElement>('.pg-canvas');
-    const r = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     r.shadowMap.enabled = true;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
-    r.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    r.shadowMap.type = THREE.PCFShadowMap; // cheaper than the soft variant
+    r.shadowMap.autoUpdate = false; // we drive updates ourselves (throttled)
+    r.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer = r;
 
     const scene = new THREE.Scene();
@@ -247,7 +249,7 @@ export class PigeonGame {
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
     sun.position.set(14, 26, 10);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(1024, 1024);
     sun.shadow.camera.left = -36;
     sun.shadow.camera.right = 36;
     sun.shadow.camera.top = 36;
@@ -456,6 +458,7 @@ export class PigeonGame {
     const crateMat = new THREE.MeshLambertMaterial({ color: 0x9a8f82 });
     for (const cv of L.covers) {
       const cr = bar(cv.x, cv.z, cv.w, cv.d, 1.0, crateMat);
+      cr.castShadow = false;
       // a darker cap so crates read distinctly from the tall ink walls
       const cap = new THREE.Mesh(
         new THREE.BoxGeometry(cv.w * 0.96, 0.12, cv.d * 0.96),
@@ -569,6 +572,9 @@ export class PigeonGame {
         makeBird({ body: 0x2b2825, head: 0x201e1d, wing: 0x171514, accent: 0xec3013 }, 'guard');
       const gscale = 0.85 * (gd.scale ?? 1);
       pg.group.scale.setScalar(gscale);
+      pg.group.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = false; // cut shadow-caster count
+      });
       this.levelGroup.add(pg.group);
       // class tint ring under the guard so enemy types read apart at a glance
       if (gd.tint !== undefined) {
@@ -2723,6 +2729,10 @@ export class PigeonGame {
         this.mapT = 0;
         this.drawMap();
       }
+      // refresh shadows every other frame (they follow the moving sun/guards but
+      // don't need per-frame precision) — halves the shadow-map render cost
+      this.frameN++;
+      this.renderer.shadowMap.needsUpdate = (this.frameN & 1) === 0;
       this.renderer.render(this.scene, this.camera);
     };
     this.rafId = requestAnimationFrame(frame);
