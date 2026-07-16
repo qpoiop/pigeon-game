@@ -29,7 +29,7 @@ export const MODELS: Partial<Record<BirdKind, string>> = {
  * points it the right way. `yaw` is the fix-up if a model faces the wrong way.
  */
 const NORM: Partial<Record<BirdKind, { height: number; yaw: number }>> = {
-  sparrow: { height: 1.5, yaw: 0 },
+  sparrow: { height: 2.2, yaw: 0 },
 };
 
 /** Kinds whose model is a skinned mesh with baked clips → Path B (skeletal). */

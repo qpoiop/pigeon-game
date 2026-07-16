@@ -335,6 +335,9 @@ export class PigeonGame {
       // free the geometry/skeleton the next spawn needs. Only dispose procedural.
       if (!old.mixer) disposeObject(old.group);
     }
+    // procedural player birds read too large next to the (0.85) guards; the
+    // skinned sparrow keeps its own normalised size.
+    p.group.scale.setScalar(p.mixer ? 1 : 0.82);
     this.actorGroup.add(p.group);
     const sm = new THREE.Mesh(
       new THREE.SphereGeometry(1.1, 14, 10),
