@@ -33,7 +33,7 @@ export const MODELS: Partial<Record<BirdKind, string>> = {
  */
 const NORM: Partial<Record<BirdKind, { height: number; yaw: number }>> = {
   sparrow: { height: 2.2, yaw: 0 },
-  phoenix: { height: 5, yaw: 0 }, // boss — large
+  phoenix: { height: 5, yaw: Math.PI / 2 }, // boss — large; yaw aligns nose to +Z
 };
 
 /** Kinds whose model is a skinned mesh with baked clips → Path B (skeletal). */
